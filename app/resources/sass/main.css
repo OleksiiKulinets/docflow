@@ -1,0 +1,232 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  background: #fafafa;
+  color: #171717;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+}
+
+.topbar {
+  height: 52px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e5e5;
+  flex-shrink: 0;
+}
+.topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  color: #171717;
+}
+.topbar .brand::before {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 18px;
+  background: #171717;
+  border-radius: 4px;
+}
+.topbar .topbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.settings {
+  width: 300px;
+  background: #ffffff;
+  border-right: 1px solid #e5e5e5;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+.settings .panel-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #737373;
+  font-weight: 600;
+}
+.settings .group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings .group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #737373;
+  letter-spacing: 0.01em;
+}
+.settings .group input,
+.settings .group select {
+  width: 100%;
+  background: #f5f5f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  color: #171717;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.settings .group input:focus,
+.settings .group select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+.settings .group input[type=range] {
+  padding: 0;
+  height: 6px;
+  accent-color: #2563eb;
+}
+.settings .group input[type=number] {
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
+  font-size: 13px;
+}
+
+.upload-box {
+  border: 1px dashed #d4d4d4;
+  background: #f5f5f5;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.2s ease;
+  position: relative;
+}
+.upload-box:hover {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.06);
+}
+.upload-box input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.upload-box .upload-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #171717;
+  margin-bottom: 4px;
+}
+.upload-box .upload-sub {
+  font-size: 11px;
+  color: #a3a3a3;
+}
+
+.btn {
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  color: #171717;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: #f5f5f5;
+  border-color: #d4d4d4;
+}
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: #2563eb;
+  color: #ffffff;
+  border: 1px solid #2563eb;
+}
+.btn-primary:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.full {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.divider {
+  width: 1px;
+  background: #e5e5e5;
+  flex-shrink: 0;
+}
+
+.preview {
+  flex: 1;
+  padding: 28px;
+  overflow-y: auto;
+  background: #fafafa;
+  display: flex;
+  justify-content: center;
+}
+.preview .document {
+  width: 100%;
+  max-width: 800px;
+  background: #ffffff;
+  color: #171717;
+  padding: 48px 52px;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e5e5;
+}
+.preview .document h1 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+  color: #171717;
+  line-height: 1.2;
+}
+.preview .document p {
+  font-size: 15px;
+  line-height: 1.75;
+  color: rgb(127.75, 127.75, 127.75);
+  max-width: 65ch;
+}
+
+.footer {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 11px;
+  color: #737373;
+  background: #ffffff;
+  border-top: 1px solid #e5e5e5;
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
+  flex-shrink: 0;
+}/*# sourceMappingURL=main.css.map */
