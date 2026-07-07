@@ -4,70 +4,192 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../sass/main.css">
-  <title>Doc Editor</title>
+  <title>DocFlow</title>
 </head>
-
 <body>
 
-<header class="topbar">
-  <div class="brand">DocFlow Editor</div>
+<header class="header">
+  <div class="header-left">
+    <a class="header-brand" href="#">
+      <span class="header-brand-mark" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2.75 2h10.5a.75.75 0 0 1 .75.75v10.5a.75.75 0 0 1-.75.75H2.75a.75.75 0 0 1-.75-.75V2.75A.75.75 0 0 1 2.75 2Zm1 1.5v9h9v-9h-9Z"/>
+          <path d="M5 5.5h6v1H5v-1Zm0 2.5h4v1H5V8Z"/>
+        </svg>
+      </span>
+      <span class="header-brand-text">DocFlow</span>
+    </a>
 
-  <div class="topbar-actions">
-    <button class="btn">Save</button>
-    <button class="btn btn-primary">Export</button>
+    <nav class="header-breadcrumb" aria-label="Breadcrumb">
+      <span class="breadcrumb-sep" aria-hidden="true">/</span>
+      <span class="breadcrumb-current">No file selected</span>
+    </nav>
+  </div>
+
+  <div class="header-search" id="header-search-wrap">
+    <svg class="header-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/>
+    </svg>
+    <input class="header-search-input" id="file-search" type="search" placeholder="Search files…" autocomplete="off" aria-expanded="false" aria-controls="search-dropdown">
+    <div class="search-dropdown" id="search-dropdown" hidden>
+      <p class="search-dropdown-empty" id="file-list-empty">No uploaded files yet</p>
+      <div class="search-dropdown-list" id="file-list" role="listbox" aria-label="Uploaded files"></div>
+    </div>
   </div>
 </header>
 
-<div class="layout">
+<div class="page">
+  <aside class="sidebar">
+    <section class="sidebar-section">
+      <h2 class="sidebar-title">Upload</h2>
+      <label class="upload-box">
+        <svg class="upload-icon" width="24" height="24" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M2.75 14A1.75 1.75 0 0 1 1 12.25V3.75C1 2.784 1.784 2 2.75 2h5.5c.69 0 1.25.56 1.25 1.25v6.5a.75.75 0 0 1-1.5 0V4.5h-5v8.75c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25V8.75a.75.75 0 0 1 1.5 0v3.5A1.75 1.75 0 0 1 10.25 14h-7.5Z"/>
+          <path d="M6.25 10.75a.75.75 0 0 1 .75-.75h4.19L9.22 8.28a.75.75 0 1 1 1.06-1.06l2.5 2.5a.75.75 0 0 1 0 1.06l-2.5 2.5a.75.75 0 1 1-1.06-1.06l1.97-1.97H7a.75.75 0 0 1-.75-.75Z"/>
+        </svg>
+        <span class="upload-title">Drop file here</span>
+        <span class="upload-sub">DOCX, TXT, PDF</span>
+        <input id="upload-input" type="file" accept=".docx,.txt,.pdf">
+      </label>
+    </section>
 
-  <aside class="settings">
-
-    <!-- FILE UPLOAD -->
-    <label class="upload-box">
-      <div class="upload-title">Upload document</div>
-      <div class="upload-sub">DOCX, TXT, PDF (mock UI)</div>
-      <input type="file">
-    </label>
-
-    <div class="panel-title">Settings</div>
-
-    <div class="group">
-      <label>Font size</label>
-      <input type="range" min="10" max="40">
-    </div>
-
-    <div class="group">
-      <label>Font family</label>
-      <select>
-        <option>Inter</option>
-        <option>Arial</option>
-        <option>Times New Roman</option>
-      </select>
-    </div>
-
-    <div class="group">
-      <label>Line spacing</label>
-      <input type="number" value="1.5" step="0.1">
-    </div>
-
-    <button class="btn full">Apply changes</button>
-
+    <section class="sidebar-section sidebar-files">
+      <div class="sidebar-section-head">
+        <h2 class="sidebar-title">My files</h2>
+        <span class="sidebar-badge" id="file-count">0</span>
+      </div>
+      <p class="sidebar-empty" id="sidebar-file-empty">No files uploaded yet</p>
+      <div class="sidebar-file-list" id="sidebar-file-list" role="list"></div>
+    </section>
   </aside>
 
-  <div class="divider"></div>
+  <main class="content">
+    <div class="content-toolbar">
+      <div class="content-toolbar-left">
+        <span class="content-filename">No file selected</span>
+        <nav class="tab-nav" aria-label="View tabs">
+          <button class="tab-nav-item is-active" id="tab-preview" type="button">Preview</button>
+          <button class="tab-nav-item" id="tab-raw" type="button" disabled>Raw</button>
+        </nav>
+      </div>
+      <div class="content-toolbar-actions">
+        <button class="btn btn-sm" id="save-btn" type="button">Save</button>
+        <button class="btn btn-primary btn-sm" id="export-btn" type="button" disabled>Download</button>
+      </div>
+    </div>
 
-  <main class="preview">
-    <div class="document">
-      <h1>Document title</h1>
-      <p>Upload a file or start editing manually.</p>
+    <div class="editor-toolbar" id="word-chrome" hidden>
+      <div class="editor-toolbar-inner" id="word-ribbon">
+        <div class="ribbon-row">
+          <div class="ribbon-group">
+            <span class="ribbon-group-label">Clipboard</span>
+            <div class="ribbon-group-body">
+              <button type="button" class="ribbon-btn ribbon-btn-lg" data-cmd="paste" title="Paste (Ctrl+V)">
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 0H4.75C3.78 0 3 0.78 3 1.75v1.5C1.62 3.42.75 4.55.75 6v7.25A1.75 1.75 0 0 0 2.5 15h8.75a1.75 1.75 0 0 0 1.75-1.75V6c0-1.45-.87-2.58-2.25-2.75V1.75A1.75 1.75 0 0 0 9.5 0ZM4.5 1.75a.25.25 0 0 1 .25-.25h4.75a.25.25 0 0 1 .25.25V3h-5V1.75Z"/></svg>
+                <span>Paste</span>
+              </button>
+              <div class="ribbon-btn-stack">
+                <button type="button" class="ribbon-btn" data-cmd="cut" title="Cut">Cut</button>
+                <button type="button" class="ribbon-btn" data-cmd="copy" title="Copy">Copy</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ribbon-group ribbon-group-font">
+            <span class="ribbon-group-label">Font</span>
+            <div class="ribbon-group-body">
+              <div class="ribbon-font-row">
+                <select class="ribbon-select" id="fmt-font" title="Font">
+                  <option value="Calibri">Calibri (Body)</option>
+                  <option value="Arial">Arial</option>
+                  <option value="Times New Roman">Times New Roman</option>
+                  <option value="Cambria">Cambria</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="Verdana">Verdana</option>
+                  <option value="Courier New">Courier New</option>
+                </select>
+                <select class="ribbon-select ribbon-select-sm" id="fmt-size" title="Font size">
+                  <option>8</option><option>9</option><option>10</option>
+                  <option selected>11</option><option>12</option><option>14</option>
+                  <option>16</option><option>18</option><option>20</option>
+                  <option>24</option><option>28</option><option>36</option><option>48</option><option>72</option>
+                </select>
+                <button type="button" class="ribbon-btn" id="fmt-grow" title="Grow font">A<sup>+</sup></button>
+                <button type="button" class="ribbon-btn" id="fmt-shrink" title="Shrink font">A<sup>−</sup></button>
+              </div>
+              <div class="ribbon-font-row">
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="bold" title="Bold"><b>B</b></button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="italic" title="Italic"><i>I</i></button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="underline" title="Underline"><u>U</u></button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="strikeThrough" title="Strikethrough"><s>ab</s></button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="subscript" title="Subscript">X<sub>2</sub></button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="superscript" title="Superscript">X<sup>2</sup></button>
+                <label class="ribbon-color" title="Font color"><span class="ribbon-color-bar" style="background:#000"></span><span>A</span><input type="color" id="fmt-color" value="#000000"></label>
+                <label class="ribbon-color ribbon-highlight" title="Text highlight color"><span class="ribbon-color-bar" style="background:#ffff00"></span><span>H</span><input type="color" id="fmt-highlight" value="#ffff00"></label>
+                <button type="button" class="ribbon-btn" data-cmd="removeFormat" title="Clear all formatting">Clear</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ribbon-group">
+            <span class="ribbon-group-label">Paragraph</span>
+            <div class="ribbon-group-body">
+              <select class="ribbon-select ribbon-select-style" id="fmt-style" title="Styles">
+                <option value="p">Normal</option>
+                <option value="h1">Heading 1</option>
+                <option value="h2">Heading 2</option>
+                <option value="h3">Heading 3</option>
+              </select>
+              <div class="ribbon-align-group">
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyLeft" title="Align left" data-align="left">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Zm0 4h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 4h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/></svg>
+                </button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyCenter" title="Center" data-align="center">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Zm2 4h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm-2 4h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/></svg>
+                </button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyRight" title="Align right" data-align="right">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Zm4 4h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm-4 4h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/></svg>
+                </button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyFull" title="Justify" data-align="justify">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Zm0 4h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Zm0 4h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/></svg>
+                </button>
+              </div>
+              <select class="ribbon-select ribbon-select-sm" id="fmt-line-height" title="Line and paragraph spacing">
+                <option value="1">1.0</option>
+                <option value="1.15" selected>1.15</option>
+                <option value="1.5">1.5</option>
+                <option value="2">2.0</option>
+              </select>
+              <button type="button" class="ribbon-btn" data-cmd="insertUnorderedList" title="Bullets">Bullets</button>
+              <button type="button" class="ribbon-btn" data-cmd="insertOrderedList" title="Numbering">Numbering</button>
+              <button type="button" class="ribbon-btn" data-cmd="outdent" title="Decrease indent">Outdent</button>
+              <button type="button" class="ribbon-btn" data-cmd="indent" title="Increase indent">Indent</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-panel" id="preview-panel">
+      <article class="markdown-body" id="preview">
+        <p class="preview-empty">Upload a file or select one from the sidebar.</p>
+      </article>
+      <textarea class="raw-editor" id="raw-editor" hidden spellcheck="false"></textarea>
     </div>
   </main>
-
 </div>
 
-<footer class="footer">
-  <span>Ready</span>
+<footer class="statusbar">
+  <div class="statusbar-left">
+    <span class="status-indicator" aria-hidden="true"></span>
+    <span id="status-text">Ready</span>
+  </div>
+  <div class="statusbar-right">
+    <span class="statusbar-item" id="status-encoding">—</span>
+  </div>
 </footer>
 
+<script src="../js/editor.js"></script>
+<script src="../js/main.js"></script>
 </body>
 </html>
