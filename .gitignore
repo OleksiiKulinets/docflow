@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.db
+.env
+.venv/
+venv/
+
+# Runtime data
+app/data/files/*
+!app/data/files/.gitkeep
+app/data/manifest.json
+
+# Build artifacts
+app/resources/sass/main.css.map
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
