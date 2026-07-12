@@ -131,6 +131,28 @@ body.dialog-open
   gap: 8px
   padding-top: 4px
 
+  &.dialog-footer--triple
+    flex-wrap: wrap
+    justify-content: stretch
+
+    .dialog-btn-save
+      order: 3
+      margin-left: auto
+
+    .dialog-btn-discard
+      order: 2
+
+    .dialog-btn-cancel
+      order: 1
+
+.dialog-btn-discard
+  color: $danger
+  border-color: color-mix(in srgb, $danger 35%, $border)
+
+  &:hover
+    background: $danger-subtle
+    border-color: color-mix(in srgb, $danger 45%, $border)
+
 // Non-blocking document loading toasts
 .loading-stack
   position: fixed

@@ -2768,6 +2768,29 @@ body.dialog-open {
   gap: 8px;
   padding-top: 4px;
 }
+.dialog-footer.dialog-footer--triple {
+  flex-wrap: wrap;
+  justify-content: stretch;
+}
+.dialog-footer.dialog-footer--triple .dialog-btn-save {
+  order: 3;
+  margin-left: auto;
+}
+.dialog-footer.dialog-footer--triple .dialog-btn-discard {
+  order: 2;
+}
+.dialog-footer.dialog-footer--triple .dialog-btn-cancel {
+  order: 1;
+}
+
+.dialog-btn-discard {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}
+.dialog-btn-discard:hover {
+  background: var(--danger-subtle);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
 
 .loading-stack {
   position: fixed;

@@ -13,6 +13,7 @@ let rulesViewStale = true;
 let cachedEditHtml = null;
 let sessionInnerHtml = null;
 let tabSwitchTimer = null;
+let appCloseInProgress = false;
 
 const decodeApiHtml = ApiClient.decodeHtml;
 const encodeHtmlForApi = ApiClient.encodeHtml;
@@ -65,11 +66,14 @@ function applyFileResult(result, { fileId, token } = {}) {
   }
   renderAllFileLists(els.fileSearch.value);
   setStatus(`Відкрито ${meta.name}`);
+  requestAnimationFrame(() => Unsaved.reset());
   return true;
 }
 
 async function uploadAndOpen(file) {
   if (!file) return false;
+
+  if (!(await confirmDiscardUnsaved())) return false;
 
   if (!isAllowedFile(file)) {
     setStatus("Підтримуються лише файли DOCX, TXT і PDF", true);
@@ -272,9 +276,12 @@ function clearEditor() {
   if (typeof Editor !== "undefined") Editor.setEnabled(false);
   rulesViewStale = true;
   updateEditTabState();
+  Unsaved.reset();
 }
 
 async function deleteFile(fileId, fileName) {
+  if (currentFileId === fileId && !(await confirmDiscardUnsaved())) return;
+
   const confirmed = await Dialogs.confirm({
     title: "Видалити файл?",
     message: `«${fileName}» буде остаточно видалено з DocFlow.`,
@@ -412,6 +419,8 @@ function updateEditTabState() {
 async function loadEditView() {
   if (!currentFileId || currentExtension !== ".docx") return;
 
+  const syncRules = rulesViewStale;
+
   if (cachedEditHtml) {
     const html = cachedEditHtml;
     cachedEditHtml = null;
@@ -430,6 +439,7 @@ async function loadEditView() {
       VariantEditor.render(els.rulesTree);
       rulesViewStale = false;
       setStatus("Створіть правило або оберіть варіант для редагування наповнення");
+      if (syncRules) Unsaved.syncRulesBaseline();
       return;
     }
   }
@@ -462,6 +472,7 @@ async function loadEditView() {
   VariantEditor.render(els.rulesTree);
   rulesViewStale = false;
   setStatus("Створіть правило або оберіть варіант для редагування наповнення");
+  if (syncRules) Unsaved.syncRulesBaseline();
 }
 
 async function handleSaveRules() {
@@ -483,6 +494,7 @@ async function handleSaveRules() {
   updateConditionsPanel();
   renderConditionsList();
   setStatus("Правила збережено");
+  Unsaved.reset();
 }
 
 async function handleRedetectRules() {
@@ -513,6 +525,77 @@ function collectEditableHtml() {
   }
   const editable = els.preview.querySelector(".docx-editable");
   return editable ? editable.innerHTML : "";
+}
+
+async function saveAllPendingChanges({ quiet = false } = {}) {
+  if (!currentFileId || currentExtension === ".pdf") return true;
+
+  if (Unsaved.htmlChanged()) {
+    let htmlToSave = collectEditableHtml();
+    if (currentExtension === ".docx" && activeTab === "edit" && sessionInnerHtml?.trim()) {
+      htmlToSave = sessionInnerHtml;
+    }
+    if (htmlToSave) {
+      const result = await window.pywebview.api.save_file(currentFileId, null, htmlToSave);
+      if (!result.ok) {
+        if (!quiet) setStatus(result.error, true);
+        return false;
+      }
+      if (result.document_settings && Object.keys(result.document_settings).length) {
+        currentDocumentSettings = result.document_settings;
+        rulesViewStale = true;
+        updateConditionsPanel();
+        renderConditionsList();
+        updateEditTabState();
+      }
+      if (currentExtension === ".docx" && result.edit_html) {
+        cachedEditHtml = decodeApiHtml(result, "edit_html");
+        sessionInnerHtml = htmlToSave || sessionInnerHtml;
+        rulesViewStale = false;
+      }
+      await refreshFileList(els.fileSearch.value);
+    }
+  }
+
+  if (Unsaved.rulesChanged()) {
+    if (typeof VariantEditor === "undefined" || !VariantEditor.getRules) return true;
+    const result = await window.pywebview.api.save_variant_rules(
+      currentFileId,
+      VariantEditor.getRules(),
+    );
+    if (!result.ok) {
+      if (!quiet) setStatus(result.error, true);
+      return false;
+    }
+    currentDocumentSettings = result.document_settings || currentDocumentSettings;
+    setPreviewHtml(decodeApiHtml(result, "edit_html"));
+    rulesViewStale = false;
+  }
+
+  Unsaved.reset();
+  if (!quiet) setStatus("Збережено");
+  return true;
+}
+
+async function confirmDiscardUnsaved() {
+  if (!Unsaved.hasChanges()) return true;
+
+  const fileName = els.contentFilename?.textContent || "Документ";
+  const choice = await Dialogs.confirmUnsaved({
+    title: "DocFlow",
+    message: "Зберегти зміни в документі?",
+    fileName,
+  });
+
+  if (choice === "cancel") return false;
+  if (choice === "discard") {
+    Unsaved.reset();
+    return true;
+  }
+  if (choice === "save") {
+    return saveAllPendingChanges({ quiet: true });
+  }
+  return false;
 }
 
 function getActiveConditionIds() {
@@ -681,6 +764,8 @@ async function handleBorrowerStatusChange(isBankEmployee) {
 }
 
 async function openFile(fileId, { loadingJob = null, token: externalToken = null, silent = false } = {}) {
+  if (!(await confirmDiscardUnsaved())) return;
+
   const token = externalToken ?? ++openRequestToken;
   const known = allFiles.find((item) => item.id === fileId);
   const job = silent
@@ -798,6 +883,7 @@ async function handleSave() {
 
   await refreshFileList(els.fileSearch.value);
   setStatus(`Збережено ${result.file.name}`);
+  Unsaved.reset();
 }
 
 async function handleExport() {
@@ -915,3 +1001,62 @@ async function afterSplash() {
 
 Splash.init();
 Splash.run(bootstrapApp).then(afterSplash);
+
+Unsaved.bind({
+  getCurrentFileId: () => currentFileId,
+  getCurrentExtension: () => currentExtension,
+  getActiveTab: () => activeTab,
+  getSessionInnerHtml: () => sessionInnerHtml,
+  captureHtml: collectEditableHtml,
+  captureRules: () => {
+    if (typeof VariantEditor !== "undefined" && VariantEditor.getRules) {
+      return JSON.stringify(VariantEditor.getRules());
+    }
+    const rules = currentDocumentSettings?.variant_rules;
+    return rules ? JSON.stringify(rules) : "";
+  },
+});
+
+function releaseClosePrompt() {
+  appCloseInProgress = false;
+  window.pywebview?.api?.cancel_close_prompt?.();
+}
+
+window.DocFlow = {
+  async handleAppClose() {
+    if (appCloseInProgress) return;
+    appCloseInProgress = true;
+
+    try {
+      if (!Unsaved.hasChanges()) {
+        await window.pywebview.api.prepare_close();
+        return;
+      }
+
+      const fileName = els.contentFilename?.textContent || "Документ";
+      const choice = await Dialogs.confirmUnsaved({
+        title: "DocFlow",
+        message: "Зберегти зміни в документі?",
+        fileName,
+      });
+
+      if (choice === "cancel") {
+        releaseClosePrompt();
+        return;
+      }
+
+      if (choice === "save") {
+        const saved = await saveAllPendingChanges({ quiet: true });
+        if (!saved) {
+          releaseClosePrompt();
+          return;
+        }
+      }
+
+      await window.pywebview.api.prepare_close();
+    } catch (error) {
+      releaseClosePrompt();
+      console.error("DocFlow.handleAppClose failed:", error);
+    }
+  },
+};

@@ -6,6 +6,7 @@ const Dialogs = (() => {
   let footerEl = null;
   let resolveFn = null;
   let lastFocus = null;
+  let dismissResult = false;
 
   function ensure() {
     if (root) return;
@@ -35,14 +36,14 @@ const Dialogs = (() => {
     footerEl = root.querySelector("#dialog-footer");
 
     root.addEventListener("click", (event) => {
-      if (event.target === root) close(false);
+      if (event.target === root) close(dismissResult);
     });
 
     document.addEventListener("keydown", (event) => {
       if (root.hidden) return;
       if (event.key === "Escape") {
         event.preventDefault();
-        close(false);
+        close(dismissResult);
       }
     });
   }
@@ -51,6 +52,7 @@ const Dialogs = (() => {
     if (!root || root.hidden) return;
     root.hidden = true;
     document.body.classList.remove("dialog-open");
+    footerEl?.classList.remove("dialog-footer--triple");
     const done = resolveFn;
     resolveFn = null;
     if (lastFocus) lastFocus.focus();
@@ -81,6 +83,7 @@ const Dialogs = (() => {
     } = options;
 
     lastFocus = document.activeElement;
+    dismissResult = false;
     titleEl.textContent = title;
     messageEl.textContent = message;
     detailEl.textContent = detail;
@@ -121,6 +124,52 @@ const Dialogs = (() => {
     return open({ showCancel: true, ...options });
   }
 
+  function confirmUnsaved({ title, message, detail = "", fileName = "" } = {}) {
+    ensure();
+
+    lastFocus = document.activeElement;
+    dismissResult = "cancel";
+    titleEl.textContent = title || "DocFlow";
+    messageEl.textContent = message || "Зберегти зміни?";
+    detailEl.textContent = detail || fileName;
+    detailEl.hidden = !(detail || fileName);
+
+    const iconEl = root.querySelector("#dialog-icon");
+    iconEl.className = "dialog-icon dialog-icon--default";
+    iconEl.innerHTML = iconFor("default");
+
+    footerEl.innerHTML = "";
+    footerEl.classList.add("dialog-footer--triple");
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn btn-sm dialog-btn-cancel";
+    cancelBtn.textContent = "Скасувати";
+    cancelBtn.addEventListener("click", () => close("cancel"));
+
+    const discardBtn = document.createElement("button");
+    discardBtn.type = "button";
+    discardBtn.className = "btn btn-sm dialog-btn-discard";
+    discardBtn.textContent = "Не зберігати";
+    discardBtn.addEventListener("click", () => close("discard"));
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn btn-sm btn-primary dialog-btn-save";
+    saveBtn.textContent = "Зберегти";
+    saveBtn.addEventListener("click", () => close("save"));
+
+    footerEl.append(cancelBtn, discardBtn, saveBtn);
+
+    root.hidden = false;
+    document.body.classList.add("dialog-open");
+    saveBtn.focus();
+
+    return new Promise((resolve) => {
+      resolveFn = resolve;
+    });
+  }
+
   function alert(options) {
     return open({
       showCancel: false,
@@ -129,5 +178,5 @@ const Dialogs = (() => {
     });
   }
 
-  return { confirm, alert };
+  return { confirm, confirmUnsaved, alert };
 })();

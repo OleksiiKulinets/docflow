@@ -1,9 +1,50 @@
 from api.encoding import encode_html_fields
 from api.export_dialog import export_file_to_dialog
 from services import file_service
+import threading
 
 
 class DocFlowApi:
+    def __init__(self) -> None:
+        self._window = None
+        self._close_confirmed = False
+        self._close_prompt_active = False
+
+    def attach_window(self, window) -> None:
+        self._window = window
+
+    def defer_close_prompt(self) -> None:
+        if self._close_prompt_active:
+            return
+        self._close_prompt_active = True
+        threading.Timer(0.05, self._run_close_prompt).start()
+
+    def _run_close_prompt(self) -> None:
+        if self._window is None:
+            self._close_prompt_active = False
+            return
+        try:
+            self._window.evaluate_js(
+                "DocFlow.handleAppClose()",
+                callback=lambda _result: None,
+            )
+        except Exception:
+            self._close_prompt_active = False
+            raise
+
+    def cancel_close_prompt(self) -> dict:
+        self._close_prompt_active = False
+        return {"ok": True}
+
+    def prepare_close(self) -> dict:
+        self._close_confirmed = True
+        threading.Timer(0.05, self._destroy_window).start()
+        return {"ok": True}
+
+    def _destroy_window(self) -> None:
+        if self._window is not None:
+            self._window.destroy()
+
     def _ok(self, data: dict | None = None) -> dict:
         payload = {"ok": True}
         if data:
