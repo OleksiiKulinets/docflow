@@ -1,0 +1,84 @@
+// Content area
+.content
+  flex: 1
+  display: flex
+  flex-direction: column
+  overflow: hidden
+  background: $surface-muted
+  min-height: 0
+  grid-column: 1
+  grid-row: 3
+
+  @media (min-width: 769px)
+    grid-column: 2
+    grid-row: 2
+
+.content-toolbar
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 12px
+  background: $surface
+  flex-shrink: 0
+  min-height: $workspace-chrome-h
+
+.content-toolbar-left
+  display: flex
+  align-items: center
+  gap: 12px
+  color: $text-muted
+  font-size: 12px
+  min-width: 0
+  flex: 1
+
+.content-toolbar-actions
+  display: flex
+  align-items: center
+  gap: 8px
+  flex-shrink: 0
+
+.content-filename
+  font-family: $font-mono
+  font-size: 12px
+  color: $text
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+
+.tab-nav
+  display: flex
+  gap: 0
+  border: 1px solid $border
+  border-radius: $radius
+  overflow: hidden
+
+.tab-nav-item
+  padding: 5px 12px
+  font: 500 12px/20px $font
+  color: $text-muted
+  background: $surface
+  border: none
+  border-right: 1px solid $border
+  cursor: pointer
+  position: relative
+
+  @media (prefers-reduced-motion: no-preference)
+    transition: color .18s ease, background .18s ease, box-shadow .18s ease
+
+  &:last-child
+    border-right: none
+
+  &:hover:not(:disabled)
+    color: $text
+    background: $surface-muted
+
+  &.is-active
+    color: $text
+    background: $surface-muted
+    box-shadow: inset 0 -2px 0 $accent
+
+  &:disabled
+    opacity: .5
+    cursor: not-allowed
+
+// Editor formatting toolbar (GitHub style)

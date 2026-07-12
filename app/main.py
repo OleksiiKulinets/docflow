@@ -1,15 +1,7 @@
 import webview
-from pathlib import Path
 
 from api import DocFlowApi
-
-BASE_DIR = Path(__file__).resolve().parent
-HTML_PATH = BASE_DIR / "resources" / "html" / "main.html"
-
-WINDOW_TITLE = "DocFlow"
-WINDOW_WIDTH = 1200
-WINDOW_HEIGHT = 800
-WINDOW_MIN_SIZE = (800, 600)
+from config import HTML_PATH, WINDOW_HEIGHT, WINDOW_MIN_SIZE, WINDOW_TITLE, WINDOW_WIDTH
 
 
 def main() -> None:

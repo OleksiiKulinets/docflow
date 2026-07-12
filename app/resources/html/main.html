@@ -1,12 +1,57 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../sass/main.css">
   <title>DocFlow</title>
+  <script>
+    (function () {
+      var saved = localStorage.getItem("docflow-theme");
+      var dark = saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      if (dark) document.documentElement.setAttribute("data-theme", "dark");
+    })();
+  </script>
 </head>
 <body>
+
+<div class="splash is-active" id="splash" role="presentation" aria-hidden="false">
+  <div class="splash-backdrop" aria-hidden="true">
+    <div class="splash-aurora splash-aurora--one"></div>
+    <div class="splash-aurora splash-aurora--two"></div>
+    <div class="splash-grid"></div>
+    <div class="splash-particles" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <div class="splash-stage">
+    <div class="splash-logo">
+      <div class="splash-logo-ring"></div>
+      <div class="splash-logo-ring splash-logo-ring--delayed"></div>
+      <div class="splash-logo-mark" aria-hidden="true">
+        <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2.75 2h10.5a.75.75 0 0 1 .75.75v10.5a.75.75 0 0 1-.75.75H2.75a.75.75 0 0 1-.75-.75V2.75A.75.75 0 0 1 2.75 2Zm1 1.5v9h9v-9h-9Z"/>
+          <path d="M5 5.5h6v1H5v-1Zm0 2.5h4v1H5V8Z"/>
+        </svg>
+      </div>
+    </div>
+
+    <h1 class="splash-title" aria-label="DocFlow">
+      <span class="splash-title-part splash-title-part--doc">Doc</span><span class="splash-title-part splash-title-part--flow">Flow</span>
+    </h1>
+    <p class="splash-tagline">Робочий простір для документів</p>
+
+    <div class="splash-progress" aria-hidden="true">
+      <div class="splash-progress-track">
+        <div class="splash-progress-bar" id="splash-progress-bar"></div>
+      </div>
+    </div>
+    <p class="splash-status" id="splash-status">Запуск…</p>
+  </div>
+</div>
+
+<div class="app-shell" id="app-shell">
 
 <header class="header">
   <div class="header-left">
@@ -20,34 +65,53 @@
       <span class="header-brand-text">DocFlow</span>
     </a>
 
-    <nav class="header-breadcrumb" aria-label="Breadcrumb">
+    <nav class="header-breadcrumb" aria-label="Навігаційний ланцюжок">
       <span class="breadcrumb-sep" aria-hidden="true">/</span>
-      <span class="breadcrumb-current">No file selected</span>
+      <span class="breadcrumb-current">Файл не вибрано</span>
     </nav>
   </div>
 
-  <div class="header-search" id="header-search-wrap">
-    <svg class="header-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/>
-    </svg>
-    <input class="header-search-input" id="file-search" type="search" placeholder="Search files…" autocomplete="off" aria-expanded="false" aria-controls="search-dropdown">
-    <div class="search-dropdown" id="search-dropdown" hidden>
-      <p class="search-dropdown-empty" id="file-list-empty">No uploaded files yet</p>
-      <div class="search-dropdown-list" id="file-list" role="listbox" aria-label="Uploaded files"></div>
+  <div class="header-right">
+    <div class="an2-switch" id="theme-switch" role="switch" aria-checked="false" aria-label="Тема: світла">
+      <div class="an2-switch-plate">
+        <span class="an2-switch-label an2-switch-label--day">СВІТ</span>
+        <button type="button" class="an2-switch-lever" id="theme-toggle" aria-label="Перемкнути тему">
+          <span class="an2-switch-grip" aria-hidden="true"></span>
+        </button>
+        <span class="an2-switch-label an2-switch-label--night">ТЕМН</span>
+      </div>
     </div>
   </div>
 </header>
 
 <div class="page">
+  <div class="workspace-chrome workspace-chrome--sidebar">
+    <h2 class="workspace-chrome-title">Документи</h2>
+  </div>
+
+  <div class="content-toolbar workspace-chrome workspace-chrome--main">
+    <div class="content-toolbar-left">
+      <span class="content-filename">Файл не вибрано</span>
+      <nav class="tab-nav" aria-label="Вкладки перегляду">
+        <button class="tab-nav-item is-active" id="tab-preview" type="button">Перегляд</button>
+        <button class="tab-nav-item" id="tab-edit" type="button" disabled>Правила</button>
+      </nav>
+    </div>
+    <div class="content-toolbar-actions">
+      <button class="btn btn-sm" id="save-btn" type="button">Зберегти</button>
+      <button class="btn btn-primary btn-sm" id="export-btn" type="button" disabled>Експорт</button>
+    </div>
+  </div>
+
   <aside class="sidebar">
-    <section class="sidebar-section">
-      <h2 class="sidebar-title">Upload</h2>
+    <section class="sidebar-section sidebar-section-upload">
+      <h2 class="sidebar-title sidebar-title--mobile">Завантаження</h2>
       <label class="upload-box">
         <svg class="upload-icon" width="24" height="24" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
           <path d="M2.75 14A1.75 1.75 0 0 1 1 12.25V3.75C1 2.784 1.784 2 2.75 2h5.5c.69 0 1.25.56 1.25 1.25v6.5a.75.75 0 0 1-1.5 0V4.5h-5v8.75c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25V8.75a.75.75 0 0 1 1.5 0v3.5A1.75 1.75 0 0 1 10.25 14h-7.5Z"/>
           <path d="M6.25 10.75a.75.75 0 0 1 .75-.75h4.19L9.22 8.28a.75.75 0 1 1 1.06-1.06l2.5 2.5a.75.75 0 0 1 0 1.06l-2.5 2.5a.75.75 0 1 1-1.06-1.06l1.97-1.97H7a.75.75 0 0 1-.75-.75Z"/>
         </svg>
-        <span class="upload-title">Drop file here</span>
+        <span class="upload-title">Перетягніть файл сюди</span>
         <span class="upload-sub">DOCX, TXT, PDF</span>
         <input id="upload-input" type="file" accept=".docx,.txt,.pdf">
       </label>
@@ -55,52 +119,49 @@
 
     <section class="sidebar-section sidebar-files">
       <div class="sidebar-section-head">
-        <h2 class="sidebar-title">My files</h2>
+        <h2 class="sidebar-title">Мої файли</h2>
         <span class="sidebar-badge" id="file-count">0</span>
       </div>
-      <p class="sidebar-empty" id="sidebar-file-empty">No files uploaded yet</p>
+      <div class="sidebar-search">
+        <svg class="sidebar-search-icon" width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/>
+        </svg>
+        <input class="sidebar-search-input" id="file-search" type="search" placeholder="Пошук у файлах…" autocomplete="off" aria-label="Пошук у файлах">
+        <button class="sidebar-search-clear" id="file-search-clear" type="button" hidden aria-label="Очистити пошук">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
+          </svg>
+        </button>
+      </div>
+      <p class="sidebar-empty" id="sidebar-file-empty">Ще немає файлів</p>
       <div class="sidebar-file-list" id="sidebar-file-list" role="list"></div>
     </section>
   </aside>
 
   <main class="content">
-    <div class="content-toolbar">
-      <div class="content-toolbar-left">
-        <span class="content-filename">No file selected</span>
-        <nav class="tab-nav" aria-label="View tabs">
-          <button class="tab-nav-item is-active" id="tab-preview" type="button">Preview</button>
-          <button class="tab-nav-item" id="tab-raw" type="button" disabled>Raw</button>
-        </nav>
-      </div>
-      <div class="content-toolbar-actions">
-        <button class="btn btn-sm" id="save-btn" type="button">Save</button>
-        <button class="btn btn-primary btn-sm" id="export-btn" type="button" disabled>Download</button>
-      </div>
-    </div>
-
     <div class="editor-toolbar" id="word-chrome" hidden>
       <div class="editor-toolbar-inner" id="word-ribbon">
         <div class="ribbon-row">
           <div class="ribbon-group">
-            <span class="ribbon-group-label">Clipboard</span>
+            <span class="ribbon-group-label">Буфер обміну</span>
             <div class="ribbon-group-body">
-              <button type="button" class="ribbon-btn ribbon-btn-lg" data-cmd="paste" title="Paste (Ctrl+V)">
+              <button type="button" class="ribbon-btn ribbon-btn-lg" data-cmd="paste" title="Вставити (Ctrl+V)">
                 <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 0H4.75C3.78 0 3 0.78 3 1.75v1.5C1.62 3.42.75 4.55.75 6v7.25A1.75 1.75 0 0 0 2.5 15h8.75a1.75 1.75 0 0 0 1.75-1.75V6c0-1.45-.87-2.58-2.25-2.75V1.75A1.75 1.75 0 0 0 9.5 0ZM4.5 1.75a.25.25 0 0 1 .25-.25h4.75a.25.25 0 0 1 .25.25V3h-5V1.75Z"/></svg>
-                <span>Paste</span>
+                <span>Вставити</span>
               </button>
               <div class="ribbon-btn-stack">
-                <button type="button" class="ribbon-btn" data-cmd="cut" title="Cut">Cut</button>
-                <button type="button" class="ribbon-btn" data-cmd="copy" title="Copy">Copy</button>
+                <button type="button" class="ribbon-btn" data-cmd="cut" title="Вирізати">Вирізати</button>
+                <button type="button" class="ribbon-btn" data-cmd="copy" title="Копіювати">Копіювати</button>
               </div>
             </div>
           </div>
 
           <div class="ribbon-group ribbon-group-font">
-            <span class="ribbon-group-label">Font</span>
+            <span class="ribbon-group-label">Шрифт</span>
             <div class="ribbon-group-body">
               <div class="ribbon-font-row">
-                <select class="ribbon-select" id="fmt-font" title="Font">
-                  <option value="Calibri">Calibri (Body)</option>
+                <select class="ribbon-select" id="fmt-font" title="Шрифт">
+                  <option value="Calibri">Calibri (основний)</option>
                   <option value="Arial">Arial</option>
                   <option value="Times New Roman">Times New Roman</option>
                   <option value="Cambria">Cambria</option>
@@ -108,62 +169,62 @@
                   <option value="Verdana">Verdana</option>
                   <option value="Courier New">Courier New</option>
                 </select>
-                <select class="ribbon-select ribbon-select-sm" id="fmt-size" title="Font size">
+                <select class="ribbon-select ribbon-select-sm" id="fmt-size" title="Розмір шрифту">
                   <option>8</option><option>9</option><option>10</option>
                   <option selected>11</option><option>12</option><option>14</option>
                   <option>16</option><option>18</option><option>20</option>
                   <option>24</option><option>28</option><option>36</option><option>48</option><option>72</option>
                 </select>
-                <button type="button" class="ribbon-btn" id="fmt-grow" title="Grow font">A<sup>+</sup></button>
-                <button type="button" class="ribbon-btn" id="fmt-shrink" title="Shrink font">A<sup>−</sup></button>
+                <button type="button" class="ribbon-btn" id="fmt-grow" title="Збільшити шрифт">A<sup>+</sup></button>
+                <button type="button" class="ribbon-btn" id="fmt-shrink" title="Зменшити шрифт">A<sup>−</sup></button>
               </div>
               <div class="ribbon-font-row">
-                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="bold" title="Bold"><b>B</b></button>
-                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="italic" title="Italic"><i>I</i></button>
-                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="underline" title="Underline"><u>U</u></button>
-                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="strikeThrough" title="Strikethrough"><s>ab</s></button>
-                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="subscript" title="Subscript">X<sub>2</sub></button>
-                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="superscript" title="Superscript">X<sup>2</sup></button>
-                <label class="ribbon-color" title="Font color"><span class="ribbon-color-bar" style="background:#000"></span><span>A</span><input type="color" id="fmt-color" value="#000000"></label>
-                <label class="ribbon-color ribbon-highlight" title="Text highlight color"><span class="ribbon-color-bar" style="background:#ffff00"></span><span>H</span><input type="color" id="fmt-highlight" value="#ffff00"></label>
-                <button type="button" class="ribbon-btn" data-cmd="removeFormat" title="Clear all formatting">Clear</button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="bold" title="Жирний"><b>B</b></button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="italic" title="Курсив"><i>I</i></button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="underline" title="Підкреслення"><u>U</u></button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="strikeThrough" title="Закреслення"><s>ab</s></button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="subscript" title="Нижній індекс">X<sub>2</sub></button>
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="superscript" title="Верхній індекс">X<sup>2</sup></button>
+                <label class="ribbon-color" title="Колір шрифту"><span class="ribbon-color-bar" style="background:#000"></span><span>A</span><input type="color" id="fmt-color" value="#000000"></label>
+                <label class="ribbon-color ribbon-highlight" title="Колір виділення"><span class="ribbon-color-bar" style="background:#ffff00"></span><span>H</span><input type="color" id="fmt-highlight" value="#ffff00"></label>
+                <button type="button" class="ribbon-btn" data-cmd="removeFormat" title="Очистити форматування">Очистити</button>
               </div>
             </div>
           </div>
 
           <div class="ribbon-group">
-            <span class="ribbon-group-label">Paragraph</span>
+            <span class="ribbon-group-label">Абзац</span>
             <div class="ribbon-group-body">
-              <select class="ribbon-select ribbon-select-style" id="fmt-style" title="Styles">
-                <option value="p">Normal</option>
-                <option value="h1">Heading 1</option>
-                <option value="h2">Heading 2</option>
-                <option value="h3">Heading 3</option>
+              <select class="ribbon-select ribbon-select-style" id="fmt-style" title="Стилі">
+                <option value="p">Звичайний</option>
+                <option value="h1">Заголовок 1</option>
+                <option value="h2">Заголовок 2</option>
+                <option value="h3">Заголовок 3</option>
               </select>
               <div class="ribbon-align-group">
-                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyLeft" title="Align left" data-align="left">
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyLeft" title="По лівому краю" data-align="left">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Zm0 4h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 4h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/></svg>
                 </button>
-                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyCenter" title="Center" data-align="center">
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyCenter" title="По центру" data-align="center">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Zm2 4h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm-2 4h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/></svg>
                 </button>
-                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyRight" title="Align right" data-align="right">
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyRight" title="По правому краю" data-align="right">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Zm4 4h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm-4 4h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/></svg>
                 </button>
-                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyFull" title="Justify" data-align="justify">
+                <button type="button" class="ribbon-btn ribbon-btn-toggle" data-cmd="justifyFull" title="По ширині" data-align="justify">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Zm0 4h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Zm0 4h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/></svg>
                 </button>
               </div>
-              <select class="ribbon-select ribbon-select-sm" id="fmt-line-height" title="Line and paragraph spacing">
+              <select class="ribbon-select ribbon-select-sm" id="fmt-line-height" title="Міжрядковий інтервал">
                 <option value="1">1.0</option>
                 <option value="1.15" selected>1.15</option>
                 <option value="1.5">1.5</option>
                 <option value="2">2.0</option>
               </select>
-              <button type="button" class="ribbon-btn" data-cmd="insertUnorderedList" title="Bullets">Bullets</button>
-              <button type="button" class="ribbon-btn" data-cmd="insertOrderedList" title="Numbering">Numbering</button>
-              <button type="button" class="ribbon-btn" data-cmd="outdent" title="Decrease indent">Outdent</button>
-              <button type="button" class="ribbon-btn" data-cmd="indent" title="Increase indent">Indent</button>
+              <button type="button" class="ribbon-btn" data-cmd="insertUnorderedList" title="Маркований список">Маркери</button>
+              <button type="button" class="ribbon-btn" data-cmd="insertOrderedList" title="Нумерований список">Нумерація</button>
+              <button type="button" class="ribbon-btn" data-cmd="outdent" title="Зменшити відступ">Відступ −</button>
+              <button type="button" class="ribbon-btn" data-cmd="indent" title="Збільшити відступ">Відступ +</button>
             </div>
           </div>
         </div>
@@ -171,10 +232,32 @@
     </div>
 
     <div class="preview-panel" id="preview-panel">
+      <aside class="conditions-panel" id="conditions-panel" aria-hidden="true">
+        <div class="conditions-panel-head">
+          <h3 class="conditions-panel-title">Умови документа</h3>
+          <p class="conditions-panel-sub">Оберіть відповіді — зміст документа оновиться одразу.</p>
+        </div>
+        <div class="conditions-list" id="conditions-list"></div>
+      </aside>
+
+      <aside class="rules-panel" id="rules-panel" aria-hidden="true">
+        <div class="rules-panel-head">
+          <h3 class="rules-panel-title">Правила документа</h3>
+          <p class="rules-panel-sub">Створіть правило, оберіть умову та привʼяжіть підпункти з варіантами.</p>
+          <div class="rules-panel-toolbar">
+            <button class="btn btn-sm" id="redetect-rules-btn" type="button" title="Оновити структуру з документа">Оновити</button>
+            <button class="btn btn-primary btn-sm" id="save-rules-btn" type="button">Зберегти</button>
+            <button class="btn btn-sm btn-accent" id="add-rule-btn" type="button">Додати правило</button>
+          </div>
+        </div>
+        <div class="rules-panel-scroll">
+          <div id="rules-tree"></div>
+        </div>
+      </aside>
+
       <article class="markdown-body" id="preview">
-        <p class="preview-empty">Upload a file or select one from the sidebar.</p>
+        <p class="preview-empty">Завантажте файл або виберіть його в боковій панелі.</p>
       </article>
-      <textarea class="raw-editor" id="raw-editor" hidden spellcheck="false"></textarea>
     </div>
   </main>
 </div>
@@ -182,14 +265,26 @@
 <footer class="statusbar">
   <div class="statusbar-left">
     <span class="status-indicator" aria-hidden="true"></span>
-    <span id="status-text">Ready</span>
+    <span id="status-text">Готово</span>
   </div>
   <div class="statusbar-right">
     <span class="statusbar-item" id="status-encoding">—</span>
   </div>
 </footer>
 
+</div>
+
+<div class="loading-stack" id="loading-stack" aria-live="polite" aria-relevant="additions text"></div>
+
+<script src="../js/core/dom.js"></script>
+<script src="../js/core/utils.js"></script>
+<script src="../js/core/api-client.js"></script>
+<script src="../js/splash.js"></script>
+<script src="../js/dialogs.js"></script>
+<script src="../js/loading.js"></script>
+<script src="../js/theme.js"></script>
 <script src="../js/editor.js"></script>
+<script src="../js/variant-editor.js"></script>
 <script src="../js/main.js"></script>
 </body>
 </html>

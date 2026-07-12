@@ -1,0 +1,1045 @@
+// Sidebar
+.sidebar
+  background: $surface
+  border-bottom: 1px solid $border
+  padding: 16px
+  display: flex
+  flex-direction: column
+  gap: 20px
+  overflow: hidden
+  min-height: 0
+  grid-column: 1
+  grid-row: 2
+
+  @media (min-width: 769px)
+    grid-column: 1
+    grid-row: 2
+    border-right: 1px solid $border
+    border-bottom: none
+
+.sidebar-section
+  display: flex
+  flex-direction: column
+  gap: 12px
+  min-height: 0
+
+.sidebar-section.sidebar-files
+  flex: 1
+
+.sidebar-section-head
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 8px
+  padding-bottom: 8px
+  border-bottom: 1px solid $border
+
+.sidebar-title
+  font-size: 13px
+  font-weight: 600
+  color: $text
+
+.sidebar-title--mobile
+  padding-bottom: 8px
+  border-bottom: 1px solid $border
+
+  @media (min-width: 769px)
+    display: none
+
+.sidebar-section-upload .sidebar-title--mobile
+  @media (min-width: 769px)
+    display: none
+
+.sidebar-section > .sidebar-title:not(.sidebar-title--mobile)
+  padding-bottom: 8px
+  border-bottom: 1px solid $border
+
+.sidebar-section-head .sidebar-title
+  padding-bottom: 0
+  border-bottom: none
+
+.sidebar-badge
+  font-size: 11px
+  font-weight: 600
+  color: $text-muted
+  background: $surface-muted
+  border: 1px solid $border
+  border-radius: 999px
+  padding: 1px 8px
+
+.sidebar-search
+  position: relative
+  display: flex
+  align-items: center
+  gap: 8px
+  padding: 0 10px
+  height: 34px
+  background: $bg-soft
+  border: 1px solid $border
+  border-radius: $radius
+  transition: border-color .15s ease, box-shadow .15s ease
+
+  &:focus-within
+    border-color: $accent
+    box-shadow: 0 0 0 3px $accent-subtle
+
+.sidebar-search-icon
+  flex-shrink: 0
+  opacity: .55
+  color: $text-muted
+
+.sidebar-search-input
+  flex: 1
+  min-width: 0
+  border: none
+  background: transparent
+  font: inherit
+  font-size: 13px
+  color: $text
+  outline: none
+
+  &::placeholder
+    color: $text-subtle
+
+  &::-webkit-search-cancel-button
+    display: none
+
+.sidebar-search-clear
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 22px
+  height: 22px
+  border: none
+  border-radius: 999px
+  background: transparent
+  color: $text-muted
+  cursor: pointer
+  flex-shrink: 0
+
+  &:hover
+    background: $surface-subtle
+    color: $text
+
+.sidebar-empty
+  font-size: 12px
+  color: $text-muted
+  text-align: center
+  padding: 16px 8px
+  background: $bg-soft
+  border: 1px dashed $border
+  border-radius: $radius
+
+.sidebar-file-list
+  display: flex
+  flex-direction: column
+  gap: 6px
+  flex: 1
+  min-height: 0
+  overflow-y: auto
+
+.sidebar-file-item
+  display: flex
+  align-items: stretch
+  gap: 4px
+  border: 1px solid $border
+  border-radius: $radius
+  background: $surface
+  overflow: hidden
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: ui-fade-in .22s ease both
+    animation-delay: calc(var(--item-index, 1) * 24ms)
+
+  &:hover
+    border-color: $border-muted
+    box-shadow: 0 1px 4px var(--shadow-soft)
+
+  &.is-active
+    border-color: rgba(9, 105, 218, .45)
+    background: $accent-subtle
+    box-shadow: 0 0 0 1px rgba(9, 105, 218, .15)
+
+.sidebar-file-open
+  flex: 1
+  display: flex
+  align-items: center
+  gap: 10px
+  min-width: 0
+  padding: 10px 12px
+  border: none
+  background: transparent
+  text-align: left
+  cursor: pointer
+
+.sidebar-file-icon
+  flex-shrink: 0
+
+.file-type-badge
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  min-width: 38px
+  height: 22px
+  padding: 0 6px
+  border-radius: 4px
+  font: 700 9px/1 $font-mono
+  letter-spacing: .04em
+  text-transform: uppercase
+
+  &--docx
+    color: #0550ae
+    background: $accent-subtle
+    border: 1px solid rgba(9, 105, 218, .25)
+
+  &--pdf
+    color: #a40e26
+    background: $danger-subtle
+    border: 1px solid rgba(207, 34, 46, .25)
+
+  &--txt
+    color: $text-muted
+    background: $surface-muted
+    border: 1px solid $border
+
+  &--file
+    color: $text-muted
+    background: $surface-muted
+    border: 1px solid $border
+
+.sidebar-file-info
+  display: flex
+  flex-direction: column
+  gap: 2px
+  min-width: 0
+
+.sidebar-file-name
+  font-size: 13px
+  font-weight: 600
+  color: $text
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+
+.sidebar-file-meta
+  font-size: 11px
+  color: $text-muted
+
+.sidebar-file-delete
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 40px
+  border: none
+  border-left: 1px solid $border
+  background: transparent
+  color: $text-muted
+  cursor: pointer
+  flex-shrink: 0
+
+  &:hover
+    background: $danger-subtle
+    color: $danger
+
+.sidebar-settings
+  margin-top: 4px
+
+.sidebar-settings-hint
+  font-size: 12px
+  line-height: 1.45
+  color: $text-muted
+  margin: 0
+
+.settings-options
+  display: flex
+  flex-direction: column
+  gap: 8px
+
+.settings-option
+  display: flex
+  align-items: flex-start
+  gap: 10px
+  padding: 10px 12px
+  border: 1px solid $border
+  border-radius: $radius
+  background: $bg
+  cursor: pointer
+  transition: border-color .15s ease, background .15s ease
+
+  &:hover
+    border-color: $accent
+    background: $surface
+
+  &:has(input:checked)
+    border-color: $accent
+    background: $accent-subtle
+
+  input
+    margin-top: 3px
+    flex-shrink: 0
+    accent-color: $accent
+
+.settings-option-body
+  display: flex
+  flex-direction: column
+  gap: 2px
+  min-width: 0
+
+.settings-option-title
+  font-size: 13px
+  font-weight: 600
+  color: $text
+
+.settings-option-desc
+  font-size: 11px
+  line-height: 1.4
+  color: $text-muted
+
+.conditions-panel
+  width: 0
+  flex-shrink: 0
+  display: flex
+  flex-direction: column
+  gap: 12px
+  padding: 0
+  border-right: 0 solid $border
+  background: $surface
+  overflow: hidden
+  opacity: 0
+  pointer-events: none
+
+  &[aria-hidden="false"]
+    width: 280px
+    padding: 16px
+    border-right-width: 1px
+    opacity: 1
+    pointer-events: auto
+
+  @media (prefers-reduced-motion: no-preference)
+    transition: width .24s cubic-bezier(.4, 0, .2, 1), opacity .2s ease, padding .24s ease, border-width .24s ease
+
+    &[aria-hidden="false"]
+      animation: ui-slide-in .24s ease both
+
+.conditions-panel-head
+  display: flex
+  flex-direction: column
+  gap: 6px
+  padding-bottom: 12px
+  border-bottom: 1px solid $border
+  flex-shrink: 0
+
+.conditions-panel-title
+  font-size: 14px
+  font-weight: 600
+  color: $text
+  margin: 0
+
+.conditions-panel-sub
+  font-size: 12px
+  line-height: 1.45
+  color: $text-muted
+  margin: 0
+
+.conditions-list
+  display: flex
+  flex-direction: column
+  gap: 10px
+  overflow-y: auto
+  min-height: 0
+
+.conditions-empty
+  font-size: 12px
+  line-height: 1.45
+  color: $text-muted
+  margin: 0
+
+.condition-card
+  display: flex
+  flex-direction: column
+  gap: 10px
+  padding: 12px
+  border: 1px solid $border
+  border-radius: $radius
+  background: $bg-soft
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: ui-fade-in .24s ease both
+
+.condition-card-head
+  display: flex
+  flex-direction: column
+  gap: 4px
+
+.condition-card-label
+  font-size: 10px
+  font-weight: 700
+  text-transform: uppercase
+  letter-spacing: .04em
+  color: $text-muted
+
+.condition-card-title
+  font-size: 13px
+  font-weight: 600
+  line-height: 1.4
+  color: $text
+  margin: 0
+
+.condition-card-options
+  display: grid
+  grid-template-columns: 1fr 1fr
+  gap: 8px
+
+.condition-option
+  position: relative
+  cursor: pointer
+
+  input
+    position: absolute
+    opacity: 0
+    width: 0
+    height: 0
+    pointer-events: none
+
+.condition-option-pill
+  display: flex
+  align-items: center
+  justify-content: center
+  min-height: 34px
+  padding: 0 10px
+  border: 1px solid $border
+  border-radius: $radius
+  background: $surface
+  font-size: 12px
+  font-weight: 600
+  color: $text-muted
+  transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease
+
+  .condition-option:hover &
+    border-color: $border-muted
+    color: $text
+
+  .condition-option input:checked + &
+    color: #fff
+    background: $accent
+    border-color: $accent
+    box-shadow: 0 0 0 3px $accent-subtle
+
+.rules-panel
+  width: 0
+  flex-shrink: 0
+  display: flex
+  flex-direction: column
+  gap: 0
+  padding: 0
+  border-right: 0 solid $border
+  background: $surface
+  overflow: hidden
+  opacity: 0
+  pointer-events: none
+  min-height: 0
+  align-self: stretch
+
+  &[aria-hidden="false"]
+    width: 360px
+    padding: 0
+    border-right-width: 1px
+    opacity: 1
+    pointer-events: auto
+
+  @media (prefers-reduced-motion: no-preference)
+    transition: width .28s cubic-bezier(.4, 0, .2, 1), opacity .24s ease, border-width .28s ease
+
+    &[aria-hidden="false"]
+      animation: ui-slide-in .28s cubic-bezier(.4, 0, .2, 1) both
+
+.rules-panel-head
+  display: flex
+  flex-direction: column
+  gap: 8px
+  padding: 16px 16px 12px
+  border-bottom: 1px solid $border
+  flex-shrink: 0
+  background: $surface
+
+.rules-panel-sub
+  font-size: 12px
+  line-height: 1.45
+  color: $text-muted
+  margin: 0
+
+.rules-panel-title
+  font-size: 14px
+  font-weight: 600
+  color: $text
+  margin: 0
+
+.rules-panel-toolbar
+  display: flex
+  align-items: stretch
+  gap: 6px
+  margin-top: 4px
+
+  .btn
+    flex: 1
+    min-width: 0
+    padding-left: 8px
+    padding-right: 8px
+    white-space: nowrap
+
+.rules-panel-scroll
+  flex: 1
+  min-height: 0
+  overflow-x: hidden
+  overflow-y: auto
+  overscroll-behavior: contain
+  padding: 12px 16px 16px
+  -webkit-overflow-scrolling: touch
+
+  &::-webkit-scrollbar
+    width: 8px
+
+  &::-webkit-scrollbar-thumb
+    background: var(--scrollbar)
+    border-radius: 999px
+    border: 2px solid transparent
+    background-clip: padding-box
+
+#rules-tree
+  display: flex
+  flex-direction: column
+  gap: 10px
+  min-height: min-content
+
+.rules-panel-hint
+  font-size: 12px
+  line-height: 1.45
+  color: $text-muted
+  margin: 0
+
+.rules-empty
+  font-size: 12px
+  color: $text-muted
+  text-align: center
+  padding: 16px 8px
+
+  &--soft
+    text-align: left
+    padding: 12px
+    border: 1px dashed $border
+    border-radius: $radius
+    background: $bg
+
+.rules-toolbar
+  display: none
+
+.rules-tree
+  display: flex
+  flex-direction: column
+  gap: 10px
+
+.rules-collapse-btn
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  width: 26px
+  height: 26px
+  padding: 0
+  border: 1px solid $border
+  border-radius: $radius
+  background: $surface
+  color: $text-muted
+  cursor: pointer
+  flex-shrink: 0
+
+  @media (prefers-reduced-motion: no-preference)
+    transition: transform .2s ease, background .15s ease, color .15s ease, border-color .15s ease
+
+  &:hover
+    background: $surface-muted
+    color: $text
+    border-color: $border-muted
+
+  &--sub
+    width: 24px
+    height: 24px
+
+.rules-rule-card.is-collapsed .rules-collapse-btn,
+.rules-subpoint.is-collapsed .rules-collapse-btn
+  transform: rotate(-90deg)
+
+.rules-collapsible-body
+  display: grid
+  grid-template-rows: 1fr
+  min-height: 0
+
+  @media (prefers-reduced-motion: no-preference)
+    transition: grid-template-rows .28s cubic-bezier(.4, 0, .2, 1), opacity .22s ease
+
+.rules-collapsible-inner
+  overflow: hidden
+  min-height: 0
+  display: flex
+  flex-direction: column
+  gap: 12px
+
+.is-collapsed > .rules-collapsible-body
+  grid-template-rows: 0fr
+  opacity: 0
+
+.rules-rule-card
+  display: flex
+  flex-direction: column
+  gap: 0
+  padding: 12px
+  border: 1px solid $border
+  border-radius: $radius
+  background: $bg
+
+  &.is-collapsed
+    .rules-rule-head
+      margin-bottom: 0
+
+.rules-rule-head
+  display: flex
+  align-items: flex-start
+  gap: 8px
+  margin-bottom: 12px
+
+.rules-head-actions
+  flex-shrink: 0
+  margin-left: auto
+  align-self: flex-start
+
+.rules-rule-head-main
+  display: flex
+  flex-direction: column
+  gap: 8px
+  flex: 1
+  min-width: 0
+
+.rules-rule-condition
+  display: flex
+  flex-direction: column
+  gap: 4px
+  font-size: 11px
+  color: $text-muted
+  width: 100%
+
+  select
+    width: 100%
+    font-size: 12px
+    padding: 6px 8px
+    border: 1px solid $border
+    border-radius: $radius
+    background: $surface
+    color: $text
+
+.rules-rule-head-top
+  display: flex
+  align-items: center
+  gap: 8px
+  flex-wrap: wrap
+
+.rules-rule-summary
+  font-size: 11px
+  color: $text-muted
+
+.rules-rule-card.is-collapsed .rules-rule-help,
+.rules-rule-card.is-collapsed .rules-rule-condition
+  display: none
+
+.rules-rule-card.is-collapsed .rules-rule-head-main
+  gap: 4px
+
+.rules-subpoint.is-collapsed .rules-subpoint-title
+  display: none
+
+.rules-subpoint.is-collapsed .rules-subpoint-head
+  margin-bottom: 0
+
+.rules-rule-badge
+  font-size: 10px
+  font-weight: 700
+  text-transform: uppercase
+  letter-spacing: .04em
+  color: $accent
+
+.rules-rule-help
+  font-size: 11px
+  line-height: 1.45
+  color: $text-muted
+  margin: 0
+
+.rules-rule-empty
+  font-size: 12px
+  color: $text-muted
+  margin: 0
+  padding: 8px 0
+
+.rules-rule-items
+  display: flex
+  flex-direction: column
+  gap: 12px
+
+.rules-add-item
+  display: flex
+  flex-direction: column
+  gap: 4px
+  font-size: 11px
+  color: $text-muted
+
+  select
+    font-size: 12px
+    padding: 6px 8px
+    border: 1px solid $border
+    border-radius: $radius
+    background: $surface
+    color: $text
+
+.rules-subpoint-head-row
+  display: flex
+  align-items: center
+  gap: 8px
+  flex-wrap: nowrap
+
+  .rules-subpoint-badge,
+  .rules-subpoint-status
+    flex-shrink: 0
+
+  .rules-head-actions
+    margin-left: auto
+
+.rules-icon-btn
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  width: 28px
+  height: 28px
+  padding: 0
+  border: 1px solid $border
+  border-radius: $radius
+  background: $surface
+  color: $text-muted
+  cursor: pointer
+
+  &:hover
+    background: $danger-subtle
+    color: $danger
+    border-color: rgba(207, 34, 46, .35)
+
+.ui-menu
+  position: relative
+
+.ui-menu-trigger
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  width: 28px
+  height: 28px
+  padding: 0
+  border: 1px solid transparent
+  border-radius: $radius
+  background: transparent
+  color: $text-muted
+  cursor: pointer
+
+  &:hover,
+  .ui-menu.is-open &
+    background: $surface-muted
+    border-color: $border
+    color: $text
+
+.ui-menu-dropdown
+  position: absolute
+  top: calc(100% + 4px)
+  right: 0
+  z-index: 20
+  min-width: 180px
+  padding: 4px
+  background: $surface
+  border: 1px solid $border
+  border-radius: $radius
+  box-shadow: 0 8px 24px var(--shadow-medium)
+  display: none
+
+  .ui-menu.is-open &
+    display: block
+
+    @media (prefers-reduced-motion: no-preference)
+      animation: ui-fade-in .16s ease both
+
+.ui-menu-item
+  display: flex
+  align-items: center
+  gap: 8px
+  width: 100%
+  padding: 8px 10px
+  border: none
+  border-radius: calc($radius - 2px)
+  background: transparent
+  font: inherit
+  font-size: 12px
+  color: $text
+  text-align: left
+  cursor: pointer
+
+  svg
+    flex-shrink: 0
+    opacity: .75
+
+  &:hover
+    background: $surface-muted
+
+  &--danger
+    color: $danger
+
+    &:hover
+      background: $danger-subtle
+
+.rules-subpoint-status
+  font-size: 10px
+  font-weight: 600
+  padding: 2px 8px
+  border-radius: 999px
+
+  &.is-ok
+    color: $success
+    background: $success-subtle
+
+  &.is-pending
+    color: #9a6700
+    background: rgba(154, 103, 0, .12)
+
+.rules-subpoint.is-pending
+  opacity: .95
+
+.rules-tree
+  display: flex
+  flex-direction: column
+  gap: 14px
+
+.rules-condition
+  display: flex
+  flex-direction: column
+  gap: 4px
+  padding: 10px 12px
+  border: 1px dashed $border
+  border-radius: $radius
+  background: $bg
+
+.rules-condition-label
+  font-size: 10px
+  font-weight: 700
+  text-transform: uppercase
+  letter-spacing: .04em
+  color: $text-muted
+
+.rules-condition-name
+  font-size: 13px
+  font-weight: 600
+  color: $text
+
+.rules-condition-help
+  font-size: 11px
+  line-height: 1.4
+  color: $text-muted
+
+.rules-subpoint
+  display: flex
+  flex-direction: column
+  border: 1px solid $border
+  border-radius: $radius
+  background: $surface
+  overflow: hidden
+
+.rules-subpoint-head
+  display: flex
+  flex-direction: column
+  gap: 6px
+  padding: 10px 12px
+  background: $bg-soft
+  border-bottom: 1px solid $border
+
+.rules-subpoint-badge
+  font-size: 11px
+  font-weight: 600
+  color: $text
+
+.rules-subpoint-title
+  font-size: 12px
+  line-height: 1.45
+  color: $text-muted
+  margin: 0
+  display: -webkit-box
+  -webkit-line-clamp: 2
+  -webkit-box-orient: vertical
+  overflow: hidden
+
+.rules-variants
+  display: flex
+  flex-direction: column
+  gap: 8px
+  padding: 10px 12px 12px
+
+.rules-variant
+  display: flex
+  flex-direction: column
+  gap: 8px
+  padding: 10px
+  border: 1px solid $border
+  border-radius: $radius
+  background: $bg-soft
+
+  &.is-selected
+    border-color: rgba(9, 105, 218, .45)
+    background: $accent-subtle
+    box-shadow: 0 0 0 1px rgba(9, 105, 218, .12)
+
+  &.is-unassigned:not(.is-selected)
+    opacity: .92
+
+.rules-variant-select
+  display: flex
+  align-items: flex-start
+  gap: 10px
+  text-align: left
+  border: none
+  background: transparent
+  padding: 0
+  cursor: pointer
+  width: 100%
+
+  &:hover .rules-variant-text
+    color: $text
+
+.rules-variant-num
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  width: 24px
+  height: 24px
+  border-radius: 999px
+  background: $surface
+  border: 1px solid $border
+  font-size: 11px
+  font-weight: 700
+  color: $text-muted
+  flex-shrink: 0
+
+  .rules-variant.is-selected &
+    background: $accent
+    border-color: $accent
+    color: #fff
+
+.rules-variant-copy
+  display: flex
+  flex-direction: column
+  gap: 2px
+  min-width: 0
+  flex: 1
+
+.rules-variant-label
+  font-size: 10px
+  font-weight: 700
+  text-transform: uppercase
+  letter-spacing: .04em
+  color: $text-muted
+
+.rules-variant-text
+  font-size: 12px
+  line-height: 1.4
+  color: $text
+  display: -webkit-box
+  -webkit-line-clamp: 2
+  -webkit-box-orient: vertical
+  overflow: hidden
+
+.rules-variant-when-row
+  display: flex
+  flex-direction: column
+  gap: 6px
+
+.rules-variant-when-label
+  font-size: 11px
+  color: $text-muted
+
+.rules-when-pills
+  display: grid
+  grid-template-columns: 1fr 1fr
+  gap: 6px
+
+.rules-when-pill
+  position: relative
+  cursor: pointer
+
+  input
+    position: absolute
+    opacity: 0
+    pointer-events: none
+
+  span
+    display: flex
+    align-items: center
+    justify-content: center
+    min-height: 30px
+    border: 1px solid $border
+    border-radius: $radius
+    background: $surface
+    font-size: 12px
+    font-weight: 600
+    color: $text-muted
+    transition: background .15s ease, border-color .15s ease, color .15s ease
+
+  &:hover span
+    border-color: $border-muted
+    color: $text
+
+  input:checked + span
+    color: #fff
+    background: $accent
+    border-color: $accent
+
+.rules-variant-hint
+  font-size: 11px
+  line-height: 1.4
+  color: $accent-emphasis
+  margin: 0
+
+.rules-variant-tools
+  display: flex
+  justify-content: flex-end
+  flex-wrap: wrap
+  gap: 6px
+
+.docx-structure-mode [data-block-id]
+  cursor: pointer
+  transition: outline-color .15s ease, background .15s ease
+
+.docx-block--subpoint
+  outline: 2px solid rgba(229, 83, 75, .55)
+  outline-offset: 2px
+  background: rgba(229, 83, 75, .06) !important
+
+.docx-block--variant-active,
+.docx-block--variant-inactive
+  outline: 2px solid rgba(229, 83, 75, .4)
+  outline-offset: 2px
+
+.docx-block--variant-inactive
+  opacity: .55
+
+.docx-block--content-active
+  outline: 2px solid rgba(9, 105, 218, .45)
+  outline-offset: 2px
+  background: rgba(9, 105, 218, .05) !important
+
+.docx-block--content-inactive
+  outline: 1px dashed $border
+  opacity: .45
+
+.docx-block--selected
+  outline: 2px solid $accent !important
+  outline-offset: 3px
+
+// AN-2 theme switch — minimal 3D, GitHub chrome

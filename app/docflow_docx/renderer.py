@@ -9,7 +9,7 @@ from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
-from storage.docx_numbering import (
+from docflow_docx.numbering import (
     NumberingState,
     build_numbering_state,
     is_list_paragraph,
@@ -49,7 +49,7 @@ def render_docx_html(path: Path) -> str:
 
     body = "".join(parts).strip()
     if body == f'<div class="docx-document" style="{DOCX_PAGE_STYLE}"></div>':
-        return '<p class="preview-empty">Empty document</p>'
+        return '<p class="preview-empty">Порожній документ</p>'
     return body
 
 

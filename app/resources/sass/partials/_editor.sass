@@ -1,0 +1,412 @@
+// Editor formatting toolbar (GitHub style)
+.editor-toolbar
+  flex-shrink: 0
+  background: $surface
+  border-bottom: 1px solid $border
+
+.editor-toolbar-inner
+  overflow-x: auto
+
+.ribbon-row
+  display: flex
+  align-items: stretch
+  min-width: max-content
+
+.ribbon-group
+  display: flex
+  flex-direction: column
+  justify-content: flex-end
+  padding: 8px 12px
+  position: relative
+
+  &:not(:last-child)::after
+    content: ''
+    position: absolute
+    top: 0
+    right: 0
+    bottom: 0
+    width: 1px
+    background: $border
+
+.ribbon-group-label
+  font: 500 11px/1 $font
+  color: $text-muted
+  text-align: center
+  margin-bottom: 6px
+
+.ribbon-group-body
+  display: flex
+  align-items: center
+  gap: 4px
+  flex-wrap: wrap
+  min-height: 56px
+
+.ribbon-group-font .ribbon-group-body
+  flex-direction: column
+  align-items: flex-start
+  gap: 4px
+
+.ribbon-font-row
+  display: flex
+  align-items: center
+  gap: 4px
+  flex-wrap: wrap
+
+.ribbon-align-group
+  display: inline-flex
+  align-items: center
+  align-self: stretch
+  gap: 2px
+  padding: 0 8px 0 0
+  margin-right: 4px
+  position: relative
+
+  &::after
+    content: ''
+    position: absolute
+    top: 0
+    right: 0
+    bottom: 0
+    width: 1px
+    background: $border
+
+.ribbon-btn
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  min-width: 28px
+  height: 28px
+  padding: 0 6px
+  border: 1px solid transparent
+  border-radius: $radius
+  background: transparent
+  color: $text
+  font-size: 12px
+  cursor: pointer
+
+  &:hover
+    background: $surface-muted
+    border-color: $border
+
+  &.is-active
+    background: $accent-subtle
+    border-color: rgba(9, 105, 218, .35)
+    color: $accent-emphasis
+
+.ribbon-btn-lg
+  flex-direction: column
+  min-width: 44px
+  height: 56px
+  font-size: 11px
+  gap: 2px
+
+.ribbon-btn-stack
+  display: flex
+  flex-direction: column
+  gap: 2px
+
+.ribbon-select
+  height: 28px
+  padding: 0 8px
+  border: 1px solid $border
+  border-radius: $radius
+  background: $surface
+  font-size: 12px
+  color: $text
+  min-width: 120px
+
+  &:focus
+    outline: none
+    border-color: $accent
+    box-shadow: 0 0 0 3px $accent-subtle
+
+.ribbon-select-sm
+  min-width: 52px
+  width: 52px
+
+.ribbon-select-style
+  min-width: 110px
+
+.ribbon-color
+  display: inline-flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  width: 28px
+  height: 28px
+  border: 1px solid transparent
+  border-radius: $radius
+  cursor: pointer
+  font-size: 12px
+  font-weight: 700
+  position: relative
+
+  &:hover
+    background: $surface-muted
+    border-color: $border
+
+  input[type="color"]
+    position: absolute
+    inset: 0
+    opacity: 0
+    cursor: pointer
+
+.ribbon-color-bar
+  display: block
+  width: 14px
+  height: 3px
+  margin-bottom: 1px
+
+.preview-panel
+  flex: 1
+  display: flex
+  flex-direction: row
+  overflow: hidden
+  min-height: 0
+  position: relative
+
+  &.is-edit
+    flex-direction: row
+
+  &.is-edit .conditions-panel
+    width: 0 !important
+    padding: 0 !important
+    border-right-width: 0 !important
+    opacity: 0 !important
+    pointer-events: none !important
+
+  .markdown-body
+    flex: 1
+    min-width: 0
+    min-height: 0
+
+    @media (prefers-reduced-motion: no-preference)
+      transition: opacity .28s cubic-bezier(.4, 0, .2, 1), transform .28s cubic-bezier(.4, 0, .2, 1)
+
+  &.is-tab-switching .markdown-body
+    @media (prefers-reduced-motion: no-preference)
+      opacity: .55
+
+  &.is-tab-switching.is-switching-to-edit .markdown-body
+    @media (prefers-reduced-motion: no-preference)
+      transform: translateX(10px)
+
+  &.is-tab-switching.is-switching-to-preview .markdown-body
+    @media (prefers-reduced-motion: no-preference)
+      transform: translateX(-10px)
+
+  &.is-edit .markdown-body
+    flex: 1
+    min-height: 0
+    overflow: auto
+
+  &.is-edit .docx-canvas
+    display: flex
+    flex-direction: column
+    align-items: center
+    justify-content: flex-start
+    width: 100%
+    padding: 24px 16px 40px
+    min-height: min-content
+    box-sizing: border-box
+
+  &.is-edit.is-editable .docx-canvas
+    padding: 24px 16px 40px
+
+  &.is-pdf .markdown-body
+    max-width: none
+    padding: 0
+
+  &.is-docx .markdown-body,
+  &.is-txt .markdown-body,
+  &.is-editable .markdown-body
+    max-width: none
+    padding: 0
+    background: $surface-muted
+    flex: 1
+    min-height: 0
+    width: 100%
+
+  &:not(.is-edit) .markdown-body
+    flex: 1
+    min-height: 0
+
+  &.is-editable .docx-canvas
+    display: flex
+    flex-direction: column
+    align-items: center
+    justify-content: flex-start
+    width: 100%
+    padding: 32px 24px 48px
+    min-height: min-content
+    background: $surface-muted
+    box-sizing: border-box
+
+  &.is-editable .docx-document.docx-editable,
+  &.is-editable .docx-document.docx-editable.docx-structure-mode
+    width: 210mm
+    max-width: calc(100% - 48px)
+    min-height: 297mm
+    padding: 25.4mm
+    margin: 0 auto
+    background: #ffffff !important
+    border: 1px solid $border
+    border-radius: $radius
+    box-shadow: 0 1px 3px var(--shadow-soft)
+    outline: none
+    flex-shrink: 0
+    font-family: $doc-font
+    font-size: 11pt
+    line-height: 1.15
+    color: #1f2328 !important
+
+    &:focus
+      border-color: rgba(9, 105, 218, .4)
+      box-shadow: 0 0 0 3px $accent-subtle
+
+    p
+      margin: 0 0 8pt
+      line-height: 1.15
+
+    h1, h2, h3
+      font-weight: 600
+      margin: 10pt 0 0
+
+    h1
+      font-size: 16pt
+
+    h2
+      font-size: 13pt
+
+    h3
+      font-size: 12pt
+
+    ul, ol
+      margin: 0 0 8pt 36pt
+      padding: 0
+
+    li
+      margin: 0
+      line-height: 1.15
+
+    .docx-table
+      border-collapse: collapse
+      table-layout: fixed
+
+      td, th
+        border: 1px solid $border
+        padding: 4pt 6pt
+        vertical-align: top
+
+      p.docx-cell-p,
+      td p,
+      th p
+        margin: 0
+        min-height: 1.15em
+
+// GitHub markdown-body
+.markdown-body
+  flex: 1
+  min-height: 0
+  padding: 32px
+  max-width: 980px
+  margin: 0 auto
+  width: 100%
+
+  @media (min-width: 769px)
+    padding: 45px
+
+.preview-panel .markdown-body
+  overflow-x: hidden
+  overflow-y: auto
+  overscroll-behavior: contain
+  padding: 0
+  max-width: none
+  margin: 0
+
+  h1, h2, h3, h4, h5, h6
+    font-weight: 600
+    line-height: 1.25
+    margin-bottom: 16px
+
+  h1
+    font-size: 2em
+    padding-bottom: .3em
+    border-bottom: 1px solid $border
+
+  h2
+    font-size: 1.5em
+    padding-bottom: .3em
+    border-bottom: 1px solid $border
+
+  h3
+    font-size: 1.25em
+
+  p, li
+    margin-bottom: 16px
+    line-height: 1.6
+    color: $text
+
+  li
+    margin-left: 20px
+
+  .preview-empty,
+  .preview-placeholder
+    color: $text-muted
+
+  code
+    font-family: $font-mono
+    font-size: 12px
+    background: $surface-muted
+    padding: 2px 6px
+    border-radius: $radius
+    border: 1px solid $border
+
+  .docx-document
+    h1, h2, h3, h4, h5, h6
+      border-bottom: none
+      padding-bottom: 0
+      margin-bottom: 0
+      font-weight: inherit
+      font-size: inherit
+      line-height: inherit
+
+    p, li
+      margin-bottom: 0
+      line-height: inherit
+      color: inherit
+
+    li
+      margin-left: 0
+
+    &.docx-numbered .docx-num-marker
+      font-weight: inherit
+      font-style: inherit
+      color: inherit
+
+  .docx-list
+    margin: 0 0 8pt 24pt
+    padding: 0
+
+  .docx-table
+    td p
+      margin: 0
+
+  .docx-page-break
+    page-break-after: always
+    border-top: 1px dashed $border
+    margin: 24pt 0
+
+.pdf-preview
+  flex: 1
+  min-height: 100%
+  background: $surface-muted
+
+.pdf-embed
+  width: 100%
+  height: calc(100vh - 130px)
+  min-height: 480px
+  border: none
+  display: block
+
+// Status bar

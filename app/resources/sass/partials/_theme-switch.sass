@@ -1,0 +1,99 @@
+// AN-2 theme switch — minimal 3D, GitHub chrome
+.an2-switch
+  display: flex
+  align-items: center
+  flex-shrink: 0
+  user-select: none
+
+.an2-switch-plate
+  display: flex
+  align-items: center
+  gap: 5px
+  height: 32px
+  padding: 0 8px
+  background: $bg
+  border: 1px solid $border
+  border-radius: $radius
+  box-shadow: inset 0 1px 2px var(--shadow-soft)
+
+.an2-switch-label
+  font: 500 8px/1 $font
+  letter-spacing: .02em
+  color: $text-subtle
+  min-width: 22px
+  text-align: center
+  transition: color .15s ease
+
+.an2-switch:not(.is-dark) .an2-switch-label--day
+  color: $text
+  font-weight: 600
+
+.an2-switch.is-dark .an2-switch-label--night
+  color: $text
+  font-weight: 600
+
+.an2-switch-lever
+  width: 12px
+  height: 22px
+  border: none
+  background: transparent
+  cursor: pointer
+  padding: 0
+  position: relative
+  transform-origin: 50% 90%
+  transform: rotate(-28deg)
+  transition: transform .28s cubic-bezier(.34, 1.35, .64, 1)
+
+  &:focus-visible
+    outline: none
+
+    .an2-switch-grip
+      box-shadow: 0 1px 2px var(--shadow-soft), 0 0 0 3px $accent-subtle
+
+  &.is-clicked
+    transform: rotate(-28deg) scale(.94)
+
+  .an2-switch.is-dark &
+    transform: rotate(28deg)
+
+    &.is-clicked
+      transform: rotate(28deg) scale(.94)
+
+.an2-switch-grip
+  display: block
+  width: 100%
+  height: 100%
+  background: linear-gradient(180deg, $surface 0%, $surface-subtle 100%)
+  border: 1px solid $border
+  border-radius: 3px
+  box-shadow: 0 1px 2px var(--shadow-soft)
+  position: relative
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease
+
+  &::before
+    content: ""
+    position: absolute
+    top: 2px
+    left: 50%
+    transform: translateX(-50%)
+    width: 6px
+    height: 3px
+    border-radius: 2px
+    background: $accent
+    transition: background .15s ease
+
+  .an2-switch-lever:hover &
+    border-color: $border-muted
+    background: linear-gradient(180deg, $surface 0%, $surface-muted 100%)
+
+  .an2-switch.is-dark &::before
+    background: $accent-emphasis
+
+@media (max-width: 768px)
+  .an2-switch-label
+    display: none
+
+  .an2-switch-plate
+    padding: 0 6px
+
+// Upload

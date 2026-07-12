@@ -1,0 +1,63 @@
+// Reset
+*
+  margin: 0
+  padding: 0
+  box-sizing: border-box
+
+body
+  font: 400 14px/1.5 $font
+  background: $bg
+  color: $text
+  height: 100%
+  overflow: hidden
+  display: flex
+  flex-direction: column
+  -webkit-font-smoothing: antialiased
+
+@media (prefers-reduced-motion: no-preference)
+  @keyframes ui-fade-in
+    from
+      opacity: 0
+      transform: translateY(4px)
+    to
+      opacity: 1
+      transform: translateY(0)
+
+  @keyframes ui-slide-in
+    from
+      opacity: 0
+      transform: translateX(-8px)
+    to
+      opacity: 1
+      transform: translateX(0)
+
+  @keyframes overlay-in
+    from
+      opacity: 0
+    to
+      opacity: 1
+
+  @keyframes dialog-in
+    from
+      opacity: 0
+      transform: translateY(8px) scale(.98)
+    to
+      opacity: 1
+      transform: translateY(0) scale(1)
+
+  .header,
+  .sidebar,
+  .content,
+  .workspace-chrome,
+  .editor-toolbar,
+  .statusbar,
+  .upload-box,
+  .btn,
+  .markdown-body,
+  .dialog,
+  .conditions-panel,
+  .rules-panel,
+  .condition-card,
+  .sidebar-file-item
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .15s ease, opacity .15s ease
+

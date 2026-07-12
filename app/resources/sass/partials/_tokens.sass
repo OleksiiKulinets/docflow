@@ -1,0 +1,108 @@
+// Theme tokens (CSS variables)
+:root
+  --bg: #ffffff
+  --bg-soft: #f8f9fb
+  --surface: #ffffff
+  --surface-muted: #f6f8fa
+  --surface-subtle: #eef1f5
+  --border: #d0d7de
+  --border-muted: #d8dee4
+  --text: #1f2328
+  --text-muted: #656d76
+  --text-subtle: #636c76
+  --accent: #0969da
+  --accent-emphasis: #0550ae
+  --accent-subtle: #ddf4ff
+  --success: #1a7f37
+  --success-emphasis: #116329
+  --success-subtle: #dafbe1
+  --danger: #cf222e
+  --danger-emphasis: #a40e26
+  --danger-subtle: #ffebe9
+  --doc-paper: #ffffff
+  --doc-text: #1f2328
+  --btn-active: #e9ecef
+  --shadow-soft: rgba(31, 35, 40, .08)
+  --shadow-medium: rgba(31, 35, 40, .12)
+  --shadow-strong: rgba(31, 35, 40, .18)
+  --overlay-dim: rgba(15, 17, 21, 0)
+  --overlay-bright: rgba(255, 255, 255, 0)
+  --header-mark-bg: #1f2328
+  --header-mark-fg: #ffffff
+  --scrollbar: #d8dee4
+
+html[data-theme="dark"]
+  --bg: #0d1117
+  --bg-soft: #010409
+  --surface: #161b22
+  --surface-muted: #0d1117
+  --surface-subtle: #21262d
+  --border: #30363d
+  --border-muted: #3d444d
+  --text: #e6edf3
+  --text-muted: #8b949e
+  --text-subtle: #6e7681
+  --accent: #58a6ff
+  --accent-emphasis: #79c0ff
+  --accent-subtle: rgba(56, 139, 253, .15)
+  --success: #3fb950
+  --success-emphasis: #56d364
+  --success-subtle: rgba(63, 185, 80, .15)
+  --danger: #f85149
+  --danger-emphasis: #ff7b72
+  --danger-subtle: rgba(248, 81, 73, .15)
+  --doc-paper: #1c2128
+  --doc-text: #e6edf3
+  --btn-active: #30363d
+  --shadow-soft: rgba(0, 0, 0, .35)
+  --shadow-medium: rgba(0, 0, 0, .45)
+  --shadow-strong: rgba(0, 0, 0, .55)
+  --overlay-dim: rgba(0, 0, 0, .42)
+  --overlay-bright: rgba(255, 255, 255, .28)
+  --header-mark-bg: #e6edf3
+  --header-mark-fg: #0d1117
+  --scrollbar: #484f58
+
+html
+  height: 100%
+  overflow: hidden
+  color-scheme: light
+
+html[data-theme="dark"]
+  color-scheme: dark
+
+$bg: var(--bg)
+$bg-soft: var(--bg-soft)
+$surface: var(--surface)
+$surface-muted: var(--surface-muted)
+$surface-subtle: var(--surface-subtle)
+$border: var(--border)
+$border-muted: var(--border-muted)
+
+$text: var(--text)
+$text-muted: var(--text-muted)
+$text-subtle: var(--text-subtle)
+
+$accent: var(--accent)
+$accent-emphasis: var(--accent-emphasis)
+$accent-subtle: var(--accent-subtle)
+
+$success: var(--success)
+$success-emphasis: var(--success-emphasis)
+$success-subtle: var(--success-subtle)
+
+$danger: var(--danger)
+$danger-emphasis: var(--danger-emphasis)
+$danger-subtle: var(--danger-subtle)
+
+$doc-font: Calibri, 'Segoe UI', Arial, sans-serif
+
+$sidebar-width: 300px
+$workspace-chrome-h: 48px
+
+$radius: 6px
+$radius-lg: 12px
+
+$font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'
+$font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace
+
