@@ -33,6 +33,24 @@ def load_edit_html(file_path: Path) -> str | None:
     return None
 
 
+def load_draft_source_html(file_path: Path) -> str | None:
+    data = load_edit_data(file_path)
+    draft = data.get("draft_source_html")
+    if isinstance(draft, str) and draft.strip():
+        return draft
+    return load_source_html(file_path)
+
+
+def save_draft_source_html(file_path: Path, html: str) -> None:
+    path = edit_json_path(file_path)
+    data = load_edit_data(file_path)
+    data["draft_source_html"] = html
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 def load_source_html(file_path: Path) -> str | None:
     data = load_edit_data(file_path)
     source = data.get("source_html")

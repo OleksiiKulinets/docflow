@@ -153,6 +153,67 @@ body.dialog-open
     background: $danger-subtle
     border-color: color-mix(in srgb, $danger 45%, $border)
 
+.dialog-form
+  display: flex
+  flex-direction: column
+  gap: 14px
+  margin-bottom: 16px
+
+.dialog-field
+  display: flex
+  flex-direction: column
+  gap: 6px
+
+.dialog-field-label
+  font-size: 12px
+  font-weight: 600
+  color: $text
+
+.dialog-field-input
+  width: 100%
+  padding: 9px 11px
+  border: 1px solid $border
+  border-radius: $radius
+  background: $surface
+  color: $text
+  font-size: 13px
+
+  &:focus
+    outline: 2px solid color-mix(in srgb, $accent 35%, transparent)
+    border-color: color-mix(in srgb, $accent 45%, $border)
+
+.dialog-option-list
+  display: flex
+  flex-direction: column
+  gap: 8px
+
+.dialog-option-row
+  display: flex
+  align-items: center
+  gap: 8px
+
+.dialog-option-input
+  flex: 1
+
+.dialog-option-remove
+  width: 30px
+  height: 30px
+  border: 1px solid $border
+  border-radius: $radius
+  background: $surface-muted
+  color: $text-muted
+  font-size: 18px
+  line-height: 1
+  cursor: pointer
+
+  &:hover
+    color: $danger
+    border-color: color-mix(in srgb, $danger 35%, $border)
+
+.dialog-add-option-btn
+  align-self: flex-start
+  margin-top: 2px
+
 // Non-blocking document loading toasts
 .loading-stack
   position: fixed

@@ -10,9 +10,10 @@ let activeTab = "preview";
 let allFiles = [];
 let openRequestToken = 0;
 let rulesViewStale = true;
+let rulesEditorLoaded = false;
 let cachedEditHtml = null;
+let cachedPreviewHtml = null;
 let sessionInnerHtml = null;
-let tabSwitchTimer = null;
 let appCloseInProgress = false;
 
 const decodeApiHtml = ApiClient.decodeHtml;
@@ -38,15 +39,22 @@ function applyFileResult(result, { fileId, token } = {}) {
   const documentSettings = result.document_settings || {};
   const previewHtml = decodeApiHtml(result, "preview_html");
 
-  currentDocumentSettings = documentSettings;
+  currentDocumentSettings = {
+    ...documentSettings,
+    condition_values: {},
+  };
+  delete currentDocumentSettings.is_bank_employee;
   rulesViewStale = true;
   cachedEditHtml = null;
+  cachedPreviewHtml = null;
   sessionInnerHtml = null;
 
   els.breadcrumb.textContent = meta.name;
   els.contentFilename.textContent = meta.name;
   if (!setPreviewHtml(previewHtml)) {
     setStatus("Документ не відобразився — спробуйте ще раз", true);
+  } else {
+    cachedPreviewHtml = previewHtml;
   }
   els.statusEncoding.textContent = meta.extension === ".txt" ? "UTF-8" : meta.extension.toUpperCase().slice(1);
 
@@ -56,10 +64,10 @@ function applyFileResult(result, { fileId, token } = {}) {
   els.previewPanel.classList.toggle("is-txt", meta.extension === ".txt");
   els.previewPanel.classList.toggle("is-editable", isEditable);
   els.saveBtn.disabled = meta.extension === ".pdf";
-  els.exportBtn.disabled = false;
+  updateDocumentActions();
 
   updateEditTabState();
-  setActiveTab("preview", { skipPreviewReload: true });
+  void setActiveTab("preview", { skipPreviewReload: true });
   if (typeof Editor !== "undefined" && isEditable) {
     Editor.setEnabled(true);
     Editor.prepareEditable?.();
@@ -117,7 +125,7 @@ async function uploadAndOpen(file) {
 
     const hasPreview = Boolean(result.preview_html || result.html_encoding?.preview_html);
     if (hasPreview && token === openRequestToken) {
-      Loading.update(job, { progress: 92, subtitle: "Відображення…" });
+      if (job) Loading.update(job, { progress: 92, subtitle: "Відображення…" });
       applyFileResult(result, { fileId, token });
       Loading.complete(job, "Завантажено");
     } else if (hasPreview) {
@@ -167,12 +175,97 @@ function escapeHtml(text) {
 function captureSessionDocument() {
   if (currentExtension !== ".docx" || activeTab !== "preview") return;
   const html = collectEditableHtml();
-  if (html?.trim()) sessionInnerHtml = html;
+  if (html?.trim()) {
+    sessionInnerHtml = html;
+    rulesViewStale = true;
+    invalidatePreviewCache();
+  }
+}
+
+async function syncDocumentSource({ html = null, quiet = false } = {}) {
+  if (!currentFileId || currentExtension !== ".docx") return true;
+
+  const payloadHtml =
+    html ||
+    (activeTab === "preview" ? collectEditableHtml() : null) ||
+    sessionInnerHtml ||
+    cachedPreviewHtml;
+  if (!payloadHtml?.trim()) return true;
+
+  sessionInnerHtml = payloadHtml;
+
+  const result = await window.pywebview.api.sync_document_source(
+    currentFileId,
+    encodeHtmlForApi(payloadHtml),
+  );
+
+  if (!result.ok) {
+    if (!quiet) setStatus(result.error, true);
+    return false;
+  }
+
+  currentDocumentSettings = result.document_settings || currentDocumentSettings;
+  cachedPreviewHtml = decodeApiHtml(result, "preview_html");
+  if (result.edit_html) {
+    cachedEditHtml = decodeApiHtml(result, "edit_html");
+  }
+  rulesViewStale = true;
+  return true;
+}
+
+function emptyPreviewMarkup({
+  title = "Почніть з документа",
+  hint = "Перетягніть файл у бокову панель або оберіть зі списку зліва",
+} = {}) {
+  return `
+    <div class="preview-empty-state" role="status" aria-live="polite">
+      <div class="preview-empty-scene" aria-hidden="true">
+        <div class="preview-empty-floaters">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="preview-empty-flow" aria-hidden="true">
+          <span class="preview-empty-flow-dot"></span>
+          <span class="preview-empty-flow-dot"></span>
+          <span class="preview-empty-flow-dot"></span>
+        </div>
+        <div class="preview-empty-stack">
+          <div class="preview-empty-sheet preview-empty-sheet--back2"></div>
+          <div class="preview-empty-sheet preview-empty-sheet--back1"></div>
+          <div class="preview-empty-sheet preview-empty-sheet--front">
+            <div class="preview-empty-sheet-head"></div>
+            <div class="preview-empty-line preview-empty-line--1"></div>
+            <div class="preview-empty-line preview-empty-line--2"></div>
+            <div class="preview-empty-line preview-empty-line--3"></div>
+            <div class="preview-empty-line-row">
+              <div class="preview-empty-line preview-empty-line--4"></div>
+              <span class="preview-empty-cursor"></span>
+            </div>
+            <div class="preview-empty-scan"></div>
+          </div>
+        </div>
+      </div>
+      <h2 class="preview-empty-title">${escapeHtml(title)}</h2>
+      <p class="preview-empty-hint">${escapeHtml(hint)}</p>
+      <div class="preview-empty-tags" aria-hidden="true">
+        <span class="preview-empty-tag">DOCX</span>
+        <span class="preview-empty-tag">TXT</span>
+        <span class="preview-empty-tag">PDF</span>
+      </div>
+    </div>
+  `;
+}
+
+function showWelcomePreview() {
+  if (!els.preview) return;
+  els.preview.innerHTML = emptyPreviewMarkup();
 }
 
 function setPreviewHtml(html) {
   if (!html || !html.trim()) {
-    els.preview.innerHTML = '<p class="preview-empty">Документ порожній або не завантажився.</p>';
+    els.preview.innerHTML = emptyPreviewMarkup({
+      title: "Документ порожній",
+      hint: "Файл відкрито, але вміст не завантажився",
+    });
     return false;
   }
   els.preview.innerHTML = html;
@@ -260,14 +353,24 @@ function clearEditor() {
   currentContent = "";
   currentDocumentSettings = {};
   rulesViewStale = true;
+  rulesEditorLoaded = false;
   sessionInnerHtml = null;
   cachedEditHtml = null;
+  if (wasEdit && isPreview && rulesEditorLoaded && typeof VariantEditor !== "undefined") {
+    currentDocumentSettings = {
+      ...currentDocumentSettings,
+      variant_rules: VariantEditor.getRules(),
+      has_configured_rules: VariantEditor.hasConfiguredRules(),
+      active_condition_ids: VariantEditor.getActiveConditionIds(),
+    };
+  }
+
   updateConditionsPanel();
   renderConditionsList();
   els.breadcrumb.textContent = "Файл не вибрано";
   els.contentFilename.textContent = "Файл не вибрано";
-  els.preview.innerHTML = '<p class="preview-empty">Завантажте файл або виберіть його в боковій панелі.</p>';
-  els.exportBtn.disabled = true;
+  els.preview.innerHTML = emptyPreviewMarkup();
+  updateDocumentActions();
   els.saveBtn.disabled = false;
   els.previewPanel.classList.remove("is-pdf", "is-docx", "is-txt", "is-editable", "is-edit");
   if (els.rulesPanel) {
@@ -304,34 +407,24 @@ async function deleteFile(fileId, fileName) {
   setStatus(`Видалено ${fileName}`);
 }
 
-function runTabTransition(isEdit) {
-  if (!els.previewPanel) return;
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-  els.previewPanel.classList.remove("is-switching-to-edit", "is-switching-to-preview");
-  els.previewPanel.classList.add(
-    isEdit ? "is-switching-to-edit" : "is-switching-to-preview",
-    "is-tab-switching",
-  );
-
-  if (tabSwitchTimer) clearTimeout(tabSwitchTimer);
-  tabSwitchTimer = setTimeout(() => {
-    els.previewPanel.classList.remove(
-      "is-tab-switching",
-      "is-switching-to-edit",
-      "is-switching-to-preview",
-    );
-    tabSwitchTimer = null;
-  }, 320);
+function invalidatePreviewCache() {
+  cachedPreviewHtml = null;
 }
 
-function setActiveTab(tab, options = {}) {
+function runTabTransition(isEdit) {
+  void isEdit;
+}
+
+async function setActiveTab(tab, options = {}) {
   const { skipPreviewReload = false } = options;
   const wasPreview = activeTab === "preview";
   const wasEdit = activeTab === "edit";
 
+  let pendingSyncHtml = null;
   if (wasPreview && tab !== "preview" && currentExtension === ".docx") {
     captureSessionDocument();
+    pendingSyncHtml = sessionInnerHtml || collectEditableHtml();
+    if (pendingSyncHtml?.trim()) cachedPreviewHtml = pendingSyncHtml;
   }
 
   activeTab = tab;
@@ -339,10 +432,6 @@ function setActiveTab(tab, options = {}) {
   const isEdit = tab === "edit";
   const isDocx = currentExtension === ".docx";
   const isTxt = currentExtension === ".txt";
-  const shouldAnimate =
-    isDocx && currentFileId && wasPreview !== isPreview && wasEdit !== isEdit;
-
-  if (shouldAnimate) runTabTransition(isEdit);
 
   els.tabPreview.classList.toggle("is-active", isPreview);
   els.tabEdit?.classList.toggle("is-active", isEdit);
@@ -352,33 +441,115 @@ function setActiveTab(tab, options = {}) {
   if (els.rulesPanel) {
     els.rulesPanel.setAttribute("aria-hidden", String(!isEdit));
   }
+  updateRulesPanelResizerVisibility();
 
   if (typeof Editor !== "undefined") {
     Editor.setEnabled((isDocx || isTxt) && isPreview);
   }
 
+  if (wasEdit && isPreview && rulesEditorLoaded && typeof VariantEditor !== "undefined") {
+    currentDocumentSettings = {
+      ...currentDocumentSettings,
+      variant_rules: VariantEditor.getRules(),
+      has_configured_rules: VariantEditor.hasConfiguredRules(),
+      active_condition_ids: VariantEditor.getActiveConditionIds(),
+    };
+  }
+
   updateConditionsPanel();
 
   if (isEdit && isDocx) {
-    loadEditView();
+    await syncDocumentSource({ html: pendingSyncHtml, quiet: true });
+    await loadEditView({ force: true });
   } else if (isPreview && isDocx && currentFileId && !skipPreviewReload) {
-    const hasPreviewDoc = els.preview.querySelector(
-      ".docx-editable:not(.docx-structure-mode)",
-    );
-    const needsReload = wasEdit || !hasPreviewDoc;
-    if (needsReload) {
-      reloadPreview(sessionInnerHtml);
-    } else if (typeof Editor !== "undefined") {
-      Editor.setEnabled(true);
-      Editor.prepareEditable?.();
+    if (wasEdit) {
+      await persistRulesFromEditor({ quiet: true });
+      await reloadPreviewFromServer();
+    } else {
+      restorePreviewFromCacheOrReload(false);
     }
   }
 
   renderConditionsList();
 }
 
+async function reloadPreviewFromServer() {
+  if (!currentFileId) return;
+
+  if (sessionInnerHtml?.trim()) {
+    await syncDocumentSource({ html: sessionInnerHtml, quiet: true });
+  }
+
+  const result = await window.pywebview.api.get_file(currentFileId);
+  if (!result.ok) {
+    setStatus(result.error || "Не вдалося завантажити перегляд", true);
+    return;
+  }
+
+  currentDocumentSettings = result.document_settings || currentDocumentSettings;
+  const html = decodeApiHtml(result, "preview_html");
+  if (!setPreviewHtml(html)) {
+    setStatus("Перегляд документа порожній", true);
+    return;
+  }
+  cachedPreviewHtml = html;
+  sessionInnerHtml = html;
+  rulesViewStale = false;
+  if (typeof Editor !== "undefined") {
+    Editor.setEnabled(true);
+    Editor.prepareEditable?.();
+  }
+  updateConditionsPanel();
+  updateDocumentActions();
+}
+
+function restorePreviewFromCacheOrReload(wasEdit) {
+  const hasPreviewDoc = els.preview.querySelector(".docx-editable:not(.docx-structure-mode)");
+
+  if (!rulesViewStale && cachedPreviewHtml?.trim()) {
+    setPreviewHtml(cachedPreviewHtml);
+    if (typeof Editor !== "undefined") {
+      Editor.setEnabled(true);
+      Editor.prepareEditable?.();
+    }
+    return;
+  }
+
+  if (wasEdit || rulesViewStale || !hasPreviewDoc) {
+    reloadPreview(sessionInnerHtml);
+    return;
+  }
+
+  if (typeof Editor !== "undefined") {
+    Editor.setEnabled(true);
+    Editor.prepareEditable?.();
+  }
+}
+
+async function persistRulesFromEditor({ quiet = false } = {}) {
+  if (!currentFileId || !rulesEditorLoaded || typeof VariantEditor === "undefined") {
+    return true;
+  }
+
+  const rules = VariantEditor.getRules();
+  const result = await window.pywebview.api.save_variant_rules(currentFileId, rules);
+  if (!result.ok) {
+    if (!quiet) setStatus(result.error, true);
+    return false;
+  }
+
+  currentDocumentSettings = result.document_settings || currentDocumentSettings;
+  rulesViewStale = false;
+  Unsaved.syncRulesBaseline?.();
+  return true;
+}
+
 async function reloadPreview(sessionHtml = null) {
   if (!currentFileId) return;
+
+  if (rulesEditorLoaded) {
+    await persistRulesFromEditor({ quiet: true });
+  }
 
   const useSession = typeof sessionHtml === "string" && sessionHtml.trim();
   const result = useSession
@@ -398,6 +569,7 @@ async function reloadPreview(sessionHtml = null) {
     setStatus("Перегляд документа порожній", true);
     return;
   }
+  cachedPreviewHtml = decodeApiHtml(result, "preview_html");
   if (typeof Editor !== "undefined") {
     Editor.setEnabled(true);
     Editor.prepareEditable?.();
@@ -409,69 +581,216 @@ async function reloadPreview(sessionHtml = null) {
 
 function updateEditTabState() {
   const isDocx = currentExtension === ".docx";
-  const hasVariants = currentDocumentSettings.has_contract_variants;
   if (els.tabEdit) {
-    els.tabEdit.disabled = !isDocx || !hasVariants;
+    els.tabEdit.disabled = !isDocx;
   }
-  if (!isDocx && activeTab === "edit") setActiveTab("preview");
+  if (!isDocx && activeTab === "edit") void setActiveTab("preview");
 }
 
-async function loadEditView() {
+let sidebarCollapsed = localStorage.getItem("docflow-sidebar-collapsed") === "1";
+
+function applySidebarState() {
+  els.page?.classList.toggle("is-sidebar-collapsed", sidebarCollapsed);
+  if (els.sidebarToggle) {
+    els.sidebarToggle.hidden = sidebarCollapsed;
+    els.sidebarToggle.setAttribute("aria-expanded", String(!sidebarCollapsed));
+  }
+  if (els.sidebarExpand) {
+    els.sidebarExpand.hidden = !sidebarCollapsed;
+    els.sidebarExpand.setAttribute("aria-expanded", String(sidebarCollapsed));
+  }
+}
+
+function setSidebarCollapsed(collapsed) {
+  sidebarCollapsed = collapsed;
+  localStorage.setItem("docflow-sidebar-collapsed", collapsed ? "1" : "0");
+  applySidebarState();
+}
+
+function toggleSidebar() {
+  setSidebarCollapsed(!sidebarCollapsed);
+}
+
+const RULES_PANEL_WIDTH_KEY = "docflow-rules-panel-width";
+const RULES_PANEL_WIDTH_DEFAULT = 420;
+const RULES_PANEL_WIDTH_MIN = 300;
+const RULES_PANEL_WIDTH_MAX = 760;
+
+let rulesPanelResizeState = null;
+
+function getRulesPanelMaxWidth() {
+  const panelWidth = els.previewPanel?.clientWidth || window.innerWidth;
+  return Math.min(RULES_PANEL_WIDTH_MAX, Math.max(RULES_PANEL_WIDTH_MIN, Math.round(panelWidth * 0.72)));
+}
+
+function applyRulesPanelWidth(width) {
+  const max = getRulesPanelMaxWidth();
+  const next = Math.max(RULES_PANEL_WIDTH_MIN, Math.min(max, Math.round(width)));
+  els.previewPanel?.style.setProperty("--rules-panel-width", `${next}px`);
+  return next;
+}
+
+function loadRulesPanelWidth() {
+  const saved = Number.parseInt(localStorage.getItem(RULES_PANEL_WIDTH_KEY) || "", 10);
+  if (Number.isFinite(saved)) return applyRulesPanelWidth(saved);
+  return applyRulesPanelWidth(RULES_PANEL_WIDTH_DEFAULT);
+}
+
+function updateRulesPanelResizerVisibility() {
+  const visible = activeTab === "edit" && els.rulesPanel?.getAttribute("aria-hidden") === "false";
+  if (!els.rulesPanelResizer) return;
+  els.rulesPanelResizer.hidden = !visible;
+  els.rulesPanelResizer.setAttribute("aria-hidden", String(!visible));
+}
+
+function initRulesPanelResize() {
+  if (!els.rulesPanelResizer || !els.rulesPanel || !els.previewPanel) return;
+
+  loadRulesPanelWidth();
+  updateRulesPanelResizerVisibility();
+
+  const finishResize = () => {
+    if (!rulesPanelResizeState) return;
+    rulesPanelResizeState = null;
+    document.body.classList.remove("is-resizing-rules-panel");
+    els.rulesPanel?.classList.remove("is-resizing");
+    els.rulesPanelResizer?.classList.remove("is-dragging");
+    const width = els.rulesPanel?.getBoundingClientRect().width;
+    if (width) localStorage.setItem(RULES_PANEL_WIDTH_KEY, String(Math.round(width)));
+  };
+
+  els.rulesPanelResizer.addEventListener("mousedown", (event) => {
+    if (els.rulesPanelResizer.hidden) return;
+    rulesPanelResizeState = {
+      startX: event.clientX,
+      startWidth: els.rulesPanel.getBoundingClientRect().width,
+    };
+    document.body.classList.add("is-resizing-rules-panel");
+    els.rulesPanel.classList.add("is-resizing");
+    els.rulesPanelResizer.classList.add("is-dragging");
+    event.preventDefault();
+  });
+
+  els.rulesPanelResizer.addEventListener("dblclick", () => {
+    const width = applyRulesPanelWidth(RULES_PANEL_WIDTH_DEFAULT);
+    localStorage.setItem(RULES_PANEL_WIDTH_KEY, String(width));
+    setStatus("Ширину панелі правил скинуто");
+  });
+
+  els.rulesPanelResizer.addEventListener("keydown", (event) => {
+    const step = event.shiftKey ? 40 : 16;
+    const current = els.rulesPanel.getBoundingClientRect().width || RULES_PANEL_WIDTH_DEFAULT;
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      const width = applyRulesPanelWidth(current - step);
+      localStorage.setItem(RULES_PANEL_WIDTH_KEY, String(width));
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      const width = applyRulesPanelWidth(current + step);
+      localStorage.setItem(RULES_PANEL_WIDTH_KEY, String(width));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      const width = applyRulesPanelWidth(RULES_PANEL_WIDTH_DEFAULT);
+      localStorage.setItem(RULES_PANEL_WIDTH_KEY, String(width));
+    }
+  });
+
+  window.addEventListener("mousemove", (event) => {
+    if (!rulesPanelResizeState) return;
+    const delta = event.clientX - rulesPanelResizeState.startX;
+    applyRulesPanelWidth(rulesPanelResizeState.startWidth + delta);
+  });
+
+  window.addEventListener("mouseup", finishResize);
+  window.addEventListener("blur", finishResize);
+  window.addEventListener("resize", () => {
+    const current = els.rulesPanel?.getBoundingClientRect().width;
+    if (current) applyRulesPanelWidth(current);
+  });
+}
+
+let loadEditViewPromise = null;
+
+async function loadEditView({ force = false } = {}) {
   if (!currentFileId || currentExtension !== ".docx") return;
+
+  if (loadEditViewPromise) {
+    await loadEditViewPromise;
+    return;
+  }
+
+  loadEditViewPromise = loadEditViewImpl({ force });
+  try {
+    await loadEditViewPromise;
+  } finally {
+    loadEditViewPromise = null;
+  }
+}
+
+async function loadEditViewImpl({ force = false } = {}) {
+  if (!force && rulesEditorLoaded && !rulesViewStale) {
+    return;
+  }
 
   const syncRules = rulesViewStale;
 
-  if (cachedEditHtml) {
+  if (!force && cachedEditHtml) {
     const html = cachedEditHtml;
     cachedEditHtml = null;
     if (setPreviewHtml(html)) {
       VariantEditor.init({
         previewEl: els.preview,
+        conditionsEl: els.rulesConditions,
         rulesTreeEl: els.rulesTree,
+        modeBannerEl: els.rulesModeBanner,
+        rulesEditorEl: els.rulesEditor,
         statusFn: setStatus,
+        onRulesChange: syncPreviewConditionsFromEditor,
       });
       VariantEditor.setRules(currentDocumentSettings.variant_rules || {
+        schema_version: 3,
         conditions: [],
         rules: [],
-        rule_items: [],
-        subpoints: [],
+        entries: [],
       });
-      VariantEditor.render(els.rulesTree);
+      VariantEditor.render();
+      rulesEditorLoaded = true;
       rulesViewStale = false;
-      setStatus("Створіть правило або оберіть варіант для редагування наповнення");
+      setStatus("Створіть умову, правило та пункти з документа");
       if (syncRules) Unsaved.syncRulesBaseline();
       return;
     }
   }
 
   setStatus("Завантаження редактора правил…");
-  const useSession = sessionInnerHtml?.trim();
-  const result = useSession
-    ? await window.pywebview.api.get_edit_view(
-        currentFileId,
-        encodeHtmlForApi(sessionInnerHtml),
-      )
-    : await window.pywebview.api.get_edit_view(currentFileId);
+  const result = await window.pywebview.api.get_edit_view(currentFileId);
   if (!result.ok) {
     setStatus(result.error, true);
     return;
   }
 
   currentDocumentSettings = result.document_settings || currentDocumentSettings;
-  if (!setPreviewHtml(decodeApiHtml(result, "edit_html"))) {
+  const editHtml = decodeApiHtml(result, "edit_html");
+  if (!setPreviewHtml(editHtml)) {
     setStatus("Не вдалося завантажити документ для правил", true);
     return;
   }
+  cachedEditHtml = editHtml;
 
   VariantEditor.init({
     previewEl: els.preview,
+    conditionsEl: els.rulesConditions,
     rulesTreeEl: els.rulesTree,
+    modeBannerEl: els.rulesModeBanner,
+    rulesEditorEl: els.rulesEditor,
     statusFn: setStatus,
+    onRulesChange: syncPreviewConditionsFromEditor,
   });
   VariantEditor.setRules(currentDocumentSettings.variant_rules);
-  VariantEditor.render(els.rulesTree);
+  VariantEditor.render();
+  rulesEditorLoaded = true;
   rulesViewStale = false;
-  setStatus("Створіть правило або оберіть варіант для редагування наповнення");
+  setStatus("Створіть умову, правило та пункти з документа");
   if (syncRules) Unsaved.syncRulesBaseline();
 }
 
@@ -489,26 +808,77 @@ async function handleSaveRules() {
   currentDocumentSettings = result.document_settings || currentDocumentSettings;
   setPreviewHtml(decodeApiHtml(result, "edit_html"));
   VariantEditor.setRules(currentDocumentSettings.variant_rules);
-  VariantEditor.render(els.rulesTree);
-  rulesViewStale = false;
+  VariantEditor.render();
+  invalidatePreviewCache();
+  rulesViewStale = true;
   updateConditionsPanel();
   renderConditionsList();
   setStatus("Правила збережено");
   Unsaved.reset();
 }
 
+async function ensureRulesEditorReady() {
+  if (!currentFileId || currentExtension !== ".docx") return false;
+  if (activeTab !== "edit") return false;
+  if (!rulesEditorLoaded) {
+    await loadEditView();
+  }
+  return rulesEditorLoaded;
+}
+
+async function handleAddCondition() {
+  if (!currentFileId || currentExtension !== ".docx") {
+    setStatus("Спочатку відкрийте DOCX-документ", true);
+    return;
+  }
+
+  if (activeTab !== "edit") {
+    void setActiveTab("edit");
+  }
+  await ensureRulesEditorReady();
+
+  if (!rulesEditorLoaded || typeof VariantEditor === "undefined" || !VariantEditor.addConditionAsync) {
+    setStatus("Не вдалося завантажити редактор правил", true);
+    return;
+  }
+
+  await VariantEditor.addConditionAsync();
+}
+
+async function handleAddRule() {
+  if (!currentFileId || currentExtension !== ".docx") {
+    setStatus("Спочатку відкрийте DOCX-документ", true);
+    return;
+  }
+
+  if (activeTab !== "edit") {
+    void setActiveTab("edit");
+    await ensureRulesEditorReady();
+  } else if (!rulesEditorLoaded) {
+    await ensureRulesEditorReady();
+  }
+
+  if (!rulesEditorLoaded || typeof VariantEditor === "undefined" || !VariantEditor.addRuleAsync) {
+    setStatus("Не вдалося завантажити редактор правил", true);
+    return;
+  }
+
+  await VariantEditor.addRuleAsync();
+}
+
 async function handleRedetectRules() {
   if (!currentFileId) return;
 
   const confirmed = await Dialogs.confirm({
-    title: "Визначити структуру знову?",
-    message: "Автоматичне визначення перезапише поточні привʼязки варіантів.",
-    confirmText: "Визначити",
+    title: "Скинути всі правила?",
+    message: "Усі умови, правила та пункти будуть очищені. Документ не зміниться.",
+    confirmText: "Скинути",
     cancelText: "Скасувати",
+    variant: "danger",
   });
   if (!confirmed) return;
 
-  const emptyRules = { conditions: [], rules: [], rule_items: [], subpoints: [] };
+  const emptyRules = { schema_version: 3, conditions: [], rules: [], entries: [] };
   const result = await window.pywebview.api.save_variant_rules(currentFileId, emptyRules);
   if (!result.ok) {
     setStatus(result.error, true);
@@ -516,7 +886,7 @@ async function handleRedetectRules() {
   }
 
   await loadEditView();
-  setStatus("Структуру визначено заново");
+  setStatus("Правила очищено");
 }
 
 function collectEditableHtml() {
@@ -598,10 +968,165 @@ async function confirmDiscardUnsaved() {
   return false;
 }
 
+function getConditionValues() {
+  return { ...(currentDocumentSettings.condition_values || {}) };
+}
+
+function documentNeedsApproval() {
+  if (currentExtension !== ".docx") return false;
+  const rules = getEffectiveVariantRules();
+  if (!(rules.entries || []).length) return false;
+  const activeIds =
+    currentDocumentSettings.active_condition_ids?.length
+      ? currentDocumentSettings.active_condition_ids
+      : getActiveConditionIdsFromRules(rules);
+  return activeIds.length > 0;
+}
+
+function allActiveConditionsChosen() {
+  const { activeIds } = getPreviewConditionsContext();
+  if (!activeIds.length) return false;
+  const values = getConditionValues();
+  return activeIds.every((id) => values[id] !== undefined && values[id] !== null);
+}
+
+function updateDocumentActions() {
+  const hasFile = Boolean(currentFileId);
+  const needsApproval = documentNeedsApproval();
+  const approved = Boolean(currentDocumentSettings.approved);
+  const pending = Boolean(currentDocumentSettings.approval_pending);
+  const canApprove = needsApproval && allActiveConditionsChosen() && !approved && !pending;
+
+  if (els.toolbarWorkflow) {
+    els.toolbarWorkflow.hidden = !needsApproval;
+  }
+  if (els.toolbarWorkflowSep) {
+    els.toolbarWorkflowSep.hidden = !needsApproval;
+  }
+
+  const showExport = hasFile && (!needsApproval || approved);
+  if (els.toolbarExport) {
+    els.toolbarExport.hidden = !showExport;
+  }
+  if (els.toolbarExportSep) {
+    els.toolbarExportSep.hidden = !showExport;
+  }
+
+  if (els.approveBtn) {
+    els.approveBtn.hidden = !needsApproval || approved;
+    if (pending) {
+      els.approveBtn.textContent = "Підтвердити";
+      els.approveBtn.disabled = false;
+    } else {
+      els.approveBtn.textContent = "Затвердити";
+      els.approveBtn.disabled = !canApprove;
+    }
+  }
+
+  if (els.unapproveBtn) {
+    if (pending) {
+      els.unapproveBtn.hidden = false;
+      els.unapproveBtn.textContent = "Ні";
+    } else if (approved) {
+      els.unapproveBtn.hidden = false;
+      els.unapproveBtn.textContent = "Скасувати";
+    } else {
+      els.unapproveBtn.hidden = true;
+    }
+  }
+
+  if (els.exportBtn) {
+    els.exportBtn.disabled = !showExport;
+    els.exportBtn.title = showExport ? "" : "З’явиться після підтвердження";
+  }
+
+  els.previewPanel?.classList.toggle("is-approved", approved && needsApproval);
+  els.previewPanel?.classList.toggle("is-approval-pending", pending && needsApproval);
+}
+
+function getPreviewConditionOptions(condition) {
+  return (condition.options || []).filter((option) => {
+    const label = String(option.label || "").trim();
+    return label !== "—" && label !== "-";
+  });
+}
+
+function buildConditionValuesPayload(nextChange = null) {
+  const values = { ...getConditionValues() };
+  if (nextChange?.clearId) {
+    delete values[nextChange.clearId];
+  } else if (nextChange?.conditionId) {
+    values[nextChange.conditionId] = nextChange.value;
+  }
+  return values;
+}
+
+function getEffectiveVariantRules() {
+  if (
+    rulesEditorLoaded &&
+    typeof VariantEditor !== "undefined" &&
+    VariantEditor.getRules
+  ) {
+    return VariantEditor.getRules();
+  }
+  return currentDocumentSettings.variant_rules || {
+    schema_version: 3,
+    conditions: [],
+    rules: [],
+    entries: [],
+  };
+}
+
+function getPreviewConditionsContext() {
+  const variantRules = getEffectiveVariantRules();
+  const activeIds =
+    rulesEditorLoaded && typeof VariantEditor !== "undefined" && VariantEditor.getActiveConditionIds
+      ? VariantEditor.getActiveConditionIds()
+      : (currentDocumentSettings.active_condition_ids ||
+          getActiveConditionIdsFromRules(variantRules));
+
+  const hasConfigured =
+    rulesEditorLoaded && typeof VariantEditor !== "undefined" && VariantEditor.hasConfiguredRules
+      ? VariantEditor.hasConfiguredRules()
+      : Boolean(currentDocumentSettings.has_configured_rules);
+
+  const conditions = (variantRules.conditions || []).filter((condition) =>
+    activeIds.includes(condition.id),
+  );
+
+  return { variantRules, activeIds, hasConfigured, conditions };
+}
+
+function getActiveConditionIdsFromRules(variantRules) {
+  if (!variantRules?.rules?.length) return [];
+  return [
+    ...new Set(
+      variantRules.rules
+        .filter(
+          (rule) =>
+            rule.condition_id &&
+            (variantRules.entries || []).some((entry) => entry.rule_id === rule.id),
+        )
+        .map((rule) => rule.condition_id),
+    ),
+  ];
+}
+
+function syncPreviewConditionsFromEditor() {
+  if (!rulesEditorLoaded || typeof VariantEditor === "undefined") return;
+  currentDocumentSettings = {
+    ...currentDocumentSettings,
+    variant_rules: VariantEditor.getRules(),
+    has_configured_rules: VariantEditor.hasConfiguredRules(),
+    active_condition_ids: VariantEditor.getActiveConditionIds(),
+  };
+  updateConditionsPanel();
+  renderConditionsList();
+  updateDocumentActions();
+}
+
 function getActiveConditionIds() {
-  const rules = currentDocumentSettings.variant_rules;
-  if (!rules?.rules?.length) return [];
-  return [...new Set(rules.rules.map((rule) => rule.condition_id).filter(Boolean))];
+  return getPreviewConditionsContext().activeIds;
 }
 
 function renderBooleanConditionCard(condition, index) {
@@ -626,28 +1151,56 @@ function renderBooleanConditionCard(condition, index) {
   `;
 }
 
+function renderChoiceConditionCard(condition, index) {
+  const options = getPreviewConditionOptions(condition);
+  return `
+    <article class="condition-card" data-condition-id="${condition.id}">
+      <header class="condition-card-head">
+        <span class="condition-card-label">Умова ${index + 1}</span>
+        <h4 class="condition-card-title">${escapeHtml(condition.label)}?</h4>
+      </header>
+      <div class="condition-card-options condition-card-options--multi" role="group" aria-label="${escapeHtml(condition.label)}">
+        ${options
+          .map(
+            (option, optionIndex) => `
+              <label class="condition-option">
+                <input type="checkbox" class="condition-input" id="condition-${condition.id}-${optionIndex}" data-condition="${condition.id}" data-value="${escapeHtml(option.value)}">
+                <span class="condition-option-pill">${escapeHtml(option.label)}</span>
+              </label>
+            `,
+          )
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
 function renderConditionsList() {
   if (!els.conditionsList) return;
 
-  const hasConfiguredRules = Boolean(currentDocumentSettings.has_configured_rules);
-  if (!hasConfiguredRules) {
+  const { activeIds, hasConfigured, conditions } = getPreviewConditionsContext();
+
+  if (!activeIds.length || !conditions.length) {
     els.conditionsList.innerHTML = "";
+    updateConditionsPanel();
     return;
   }
 
-  const activeIds = new Set(getActiveConditionIds());
-  const conditions = (currentDocumentSettings.variant_rules?.conditions || []).filter(
-    (condition) => activeIds.has(condition.id),
-  );
+  const hint = !hasConfigured
+    ? '<p class="rules-empty rules-empty--soft conditions-setup-hint">Дозаповніть правила (група або маркер), потім оберіть Так/Ні.</p>'
+    : currentDocumentSettings.approved
+      ? '<p class="rules-empty rules-empty--soft conditions-setup-hint">Документ затверджено — можна експортувати.</p>'
+      : currentDocumentSettings.approval_pending
+        ? '<p class="rules-empty rules-empty--soft conditions-setup-hint">Перегляд без інструкцій. Натисніть «Підтвердити» або «Ні», щоб повернутися.</p>'
+        : '<p class="rules-empty rules-empty--soft conditions-setup-hint">Оберіть Так/Ні — підсвітиться варіант. Потім «Затвердити».</p>';
 
-  if (!conditions.length) {
-    els.conditionsList.innerHTML =
-      '<p class="conditions-empty">Налаштуйте правила на вкладці «Правила».</p>';
-    return;
-  }
-
-  els.conditionsList.innerHTML = conditions
+  els.conditionsList.innerHTML =
+    hint +
+    conditions
     .map((condition, index) => {
+      if (condition.type === "choice" || (condition.options?.length > 2)) {
+        return renderChoiceConditionCard(condition, index);
+      }
       if (condition.type === "boolean") {
         return renderBooleanConditionCard(condition, index);
       }
@@ -665,83 +1218,128 @@ function renderConditionsList() {
 
   bindConditionEvents();
   syncConditionInputs();
+
+  const lockConditions =
+    currentDocumentSettings.approval_pending || currentDocumentSettings.approved;
+  els.conditionsList?.querySelectorAll(".condition-input").forEach((input) => {
+    input.disabled = lockConditions;
+  });
+
+  updateDocumentActions();
 }
 
 function bindConditionEvents() {
   els.conditionsList?.querySelectorAll(".condition-input").forEach((input) => {
     input.addEventListener("change", () => {
-      if (input.dataset.condition !== "bank_employee") return;
-      handleEmployeeCheckChange(input, input.dataset.value === "true");
+      const conditionId = input.dataset.condition;
+      if (!conditionId) return;
+      handleConditionChange(conditionId, input);
     });
   });
 }
 
 function syncConditionInputs() {
-  if (!currentDocumentSettings.has_configured_rules) return;
-  const isEmployee = currentDocumentSettings.is_bank_employee;
-  setEmployeeChecks(isEmployee === true ? true : isEmployee === false ? false : null);
+  const values = getConditionValues();
+
+  els.conditionsList?.querySelectorAll(".condition-card").forEach((card) => {
+    const conditionId = card.dataset.conditionId;
+    const currentValue = values[conditionId];
+    const inputs = card.querySelectorAll(".condition-input");
+    inputs.forEach((input) => {
+      if (currentValue === undefined || currentValue === null) {
+        input.checked = false;
+        return;
+      }
+      const raw = input.dataset.value;
+      const conditionMeta = getEffectiveVariantRules().conditions?.find(
+        (item) => item.id === conditionId,
+      );
+      if (conditionMeta?.type === "boolean" || conditionId === "bank_employee") {
+        input.checked =
+          (raw === "true" && currentValue === true) ||
+          (raw === "false" && currentValue === false);
+        return;
+      }
+      input.checked = String(currentValue) === String(raw);
+    });
+  });
 }
 
-function updateConditionsPanel() {
-  const hasConfiguredRules = Boolean(currentDocumentSettings.has_configured_rules);
-  const showOnPreview = hasConfiguredRules && activeTab === "preview";
-
-  els.previewPanel?.classList.toggle("has-conditions", showOnPreview);
-  if (els.conditionsPanel) {
-    els.conditionsPanel.setAttribute("aria-hidden", String(!showOnPreview));
-  }
-}
-
-function setEmployeeChecks(value) {
-  const noInput = els.conditionsList?.querySelector('[data-condition="bank_employee"][data-value="false"]');
-  const yesInput = els.conditionsList?.querySelector('[data-condition="bank_employee"][data-value="true"]');
-  if (noInput) noInput.checked = value === false;
-  if (yesInput) yesInput.checked = value === true;
-}
-
-function handleEmployeeCheckChange(targetInput, isBankEmployee) {
+function handleConditionChange(conditionId, targetInput) {
   if (applyingDocumentSetting) return;
 
   if (!targetInput.checked) {
-    const prev = currentDocumentSettings.is_bank_employee;
-    setEmployeeChecks(prev === true ? true : prev === false ? false : null);
+    const card = targetInput.closest(".condition-card");
+    const anyChecked = card?.querySelector(".condition-input:checked");
+    if (!anyChecked) {
+      handleConditionValueClear(conditionId);
+    } else {
+      syncConditionInputs();
+    }
     return;
   }
 
-  setEmployeeChecks(isBankEmployee);
-  handleBorrowerStatusChange(isBankEmployee);
+  const card = targetInput.closest(".condition-card");
+  card?.querySelectorAll(".condition-input").forEach((input) => {
+    if (input !== targetInput) input.checked = false;
+  });
+
+  let parsedValue = targetInput.dataset.value;
+  const conditionMeta = getEffectiveVariantRules().conditions?.find(
+    (item) => item.id === conditionId,
+  );
+  if (conditionMeta?.type === "boolean" || conditionId === "bank_employee") {
+    parsedValue = parsedValue === "true";
+  }
+
+  handleConditionValueChange(conditionId, parsedValue);
 }
 
-async function handleBorrowerStatusChange(isBankEmployee) {
+async function handleConditionValueClear(conditionId) {
   if (!currentFileId || applyingDocumentSetting) return;
   if (currentExtension !== ".docx") return;
 
-  applyingDocumentSetting = true;
-  setStatus(
-    isBankEmployee
-      ? "Застосовую варіант для працівника банку…"
-      : "Застосовую варіант для позичальника…",
-  );
+  if (currentDocumentSettings.approval_pending) {
+    await cancelApprovalPreviewFlow({ quiet: true });
+  }
 
+  applyingDocumentSetting = true;
   try {
-    const result = await window.pywebview.api.apply_bank_employee_setting(
+    setStatus("Скидання умови…");
+
+    if (!(await persistRulesFromEditor({ quiet: true }))) {
+      syncConditionInputs();
+      return;
+    }
+
+    const rules = getEffectiveVariantRules();
+    const result = await window.pywebview.api.clear_condition_setting(
       currentFileId,
-      isBankEmployee,
+      conditionId,
+      rules,
+      buildConditionValuesPayload({ clearId: conditionId }),
     );
 
     if (!result.ok) {
       setStatus(result.error, true);
-      const prev = currentDocumentSettings.is_bank_employee;
-      setEmployeeChecks(prev === true ? true : prev === false ? false : null);
+      syncConditionInputs();
       return;
     }
 
-    currentDocumentSettings = result.document_settings || {};
-    setEmployeeChecks(isBankEmployee);
+    currentDocumentSettings = result.document_settings || currentDocumentSettings;
     rulesViewStale = true;
+    invalidatePreviewCache();
+
+    if (rulesEditorLoaded && currentDocumentSettings.variant_rules) {
+      VariantEditor.setRules(currentDocumentSettings.variant_rules);
+      VariantEditor.render();
+      rulesViewStale = false;
+    }
 
     if (activeTab === "preview") {
-      setPreviewHtml(decodeApiHtml(result, "preview_html"));
+      const html = decodeApiHtml(result, "preview_html");
+      setPreviewHtml(html);
+      cachedPreviewHtml = html;
       sessionInnerHtml = collectEditableHtml() || sessionInnerHtml;
       if (typeof Editor !== "undefined") {
         Editor.setEnabled(true);
@@ -749,17 +1347,100 @@ async function handleBorrowerStatusChange(isBankEmployee) {
       }
     }
 
-    setStatus(
-      isBankEmployee
-        ? "Залишено варіанти для позичальника-працівника"
-        : "Залишено варіанти для звичайного позичальника",
-    );
+    updateConditionsPanel();
+    renderConditionsList();
+    setStatus("Показано обидва варіанти — умову не обрано");
   } catch (error) {
-    setStatus(error.message || "Помилка застосування налаштування", true);
-    const prev = currentDocumentSettings.is_bank_employee;
-    setEmployeeChecks(prev === true ? true : prev === false ? false : null);
+    setStatus(error.message || "Помилка скидання умови", true);
+    syncConditionInputs();
   } finally {
     applyingDocumentSetting = false;
+  }
+}
+
+async function handleConditionValueChange(conditionId, value) {
+  if (!currentFileId || applyingDocumentSetting) return;
+  if (currentExtension !== ".docx") return;
+
+  if (currentDocumentSettings.approval_pending) {
+    await cancelApprovalPreviewFlow({ quiet: true });
+  }
+
+  applyingDocumentSetting = true;
+  const jobLabel =
+    conditionId === "bank_employee"
+      ? value
+        ? "Працівник банку"
+        : "Звичайний позичальник"
+      : String(value);
+
+  try {
+    setStatus(`Застосування: ${jobLabel}…`);
+
+    if (!(await persistRulesFromEditor({ quiet: true }))) {
+      syncConditionInputs();
+      return;
+    }
+
+    const rules = getEffectiveVariantRules();
+    const result = await window.pywebview.api.apply_condition_setting(
+      currentFileId,
+      conditionId,
+      value,
+      rules,
+      buildConditionValuesPayload({ conditionId, value }),
+    );
+
+    if (!result.ok) {
+      setStatus(result.error, true);
+      syncConditionInputs();
+      return;
+    }
+
+    currentDocumentSettings = result.document_settings || currentDocumentSettings;
+    rulesViewStale = true;
+    invalidatePreviewCache();
+
+    if (rulesEditorLoaded && currentDocumentSettings.variant_rules) {
+      VariantEditor.setRules(currentDocumentSettings.variant_rules);
+      VariantEditor.render();
+      rulesViewStale = false;
+    }
+
+    if (activeTab === "preview") {
+      const html = decodeApiHtml(result, "preview_html");
+      setPreviewHtml(html);
+      cachedPreviewHtml = html;
+      sessionInnerHtml = collectEditableHtml() || sessionInnerHtml;
+      if (typeof Editor !== "undefined") {
+        Editor.setEnabled(true);
+        Editor.prepareEditable?.();
+      }
+    }
+
+    updateConditionsPanel();
+    renderConditionsList();
+
+    if (!currentDocumentSettings.has_configured_rules) {
+      setStatus("Умову збережено. Дозаповніть правила — обидва варіанти маркера/групи.", true);
+    } else {
+      setStatus("Документ оновлено за обраною умовою");
+    }
+  } catch (error) {
+    setStatus(error.message || "Помилка застосування умови", true);
+    syncConditionInputs();
+  } finally {
+    applyingDocumentSetting = false;
+  }
+}
+
+function updateConditionsPanel() {
+  const { activeIds } = getPreviewConditionsContext();
+  const showOnPreview = activeTab === "preview" && activeIds.length > 0;
+
+  els.previewPanel?.classList.toggle("has-conditions", showOnPreview);
+  if (els.conditionsPanel) {
+    els.conditionsPanel.setAttribute("aria-hidden", String(!showOnPreview));
   }
 }
 
@@ -886,6 +1567,179 @@ async function handleSave() {
   Unsaved.reset();
 }
 
+async function applyWorkflowResult(result, statusMessage) {
+  if (!result.ok) {
+    setStatus(result.error, true);
+    return false;
+  }
+
+  currentDocumentSettings = result.document_settings || currentDocumentSettings;
+  rulesViewStale = true;
+  invalidatePreviewCache();
+
+  if (rulesEditorLoaded && currentDocumentSettings.variant_rules) {
+    VariantEditor.setRules(currentDocumentSettings.variant_rules);
+    VariantEditor.render();
+    rulesViewStale = false;
+  }
+
+  if (activeTab === "preview") {
+    const html = decodeApiHtml(result, "preview_html");
+    setPreviewHtml(html);
+    cachedPreviewHtml = html;
+    sessionInnerHtml = collectEditableHtml() || sessionInnerHtml;
+    if (typeof Editor !== "undefined") {
+      Editor.setEnabled(true);
+      Editor.prepareEditable?.();
+    }
+  }
+
+  updateConditionsPanel();
+  renderConditionsList();
+  updateDocumentActions();
+  Unsaved.reset();
+  if (statusMessage) setStatus(statusMessage);
+  return true;
+}
+
+async function cancelApprovalPreviewFlow({ quiet = false } = {}) {
+  if (!currentFileId || !currentDocumentSettings.approval_pending) return true;
+
+  if (!(await persistRulesFromEditor({ quiet: true }))) return false;
+
+  const result = await window.pywebview.api.cancel_approval_preview(
+    currentFileId,
+    getEffectiveVariantRules(),
+    buildConditionValuesPayload(),
+  );
+
+  if (!result.ok) {
+    if (!quiet) setStatus(result.error, true);
+    return false;
+  }
+
+  return applyWorkflowResult(
+    result,
+    quiet ? "" : "Повернуто режим редагування з інструкціями",
+  );
+}
+
+async function handleApprove() {
+  if (!currentFileId || currentExtension !== ".docx") {
+    setStatus("Файл не вибрано", true);
+    return;
+  }
+
+  if (!documentNeedsApproval()) {
+    setStatus("У цьому документі немає правил для затвердження", true);
+    return;
+  }
+
+  if (currentDocumentSettings.approved) {
+    setStatus("Документ уже затверджено");
+    return;
+  }
+
+  if (!allActiveConditionsChosen()) {
+    setStatus("Оберіть усі умови (Так/Ні) перед затвердженням", true);
+    return;
+  }
+
+  if (!(await persistRulesFromEditor({ quiet: true }))) return;
+
+  const rules = getEffectiveVariantRules();
+  const payload = buildConditionValuesPayload();
+  const fileName = els.contentFilename.textContent || "Документ";
+
+  if (!currentDocumentSettings.approval_pending) {
+    const job = Loading.start({ title: fileName, subtitle: "Формування перегляду…" });
+    try {
+      const result = await window.pywebview.api.preview_approval_document(
+        currentFileId,
+        rules,
+        payload,
+      );
+      if (!(await applyWorkflowResult(result, "Перегляньте документ без інструкцій"))) {
+        Loading.fail(job, result.error);
+        return;
+      }
+      Loading.complete(job, "Готово до підтвердження");
+    } catch (error) {
+      setStatus(error.message || "Помилка перегляду", true);
+      Loading.fail(job);
+    }
+    return;
+  }
+
+  const confirmed = await Dialogs.confirm({
+    title: "Підтвердити документ?",
+    message: "Документ буде готовий до експорту.",
+    detail: "Ні — поверне червоні інструкції для продовження редагування.",
+    confirmText: "Так",
+    cancelText: "Ні",
+  });
+
+  if (!confirmed) {
+    await cancelApprovalPreviewFlow();
+    return;
+  }
+
+  const job = Loading.start({ title: fileName, subtitle: "Затвердження документа…" });
+  try {
+    const result = await window.pywebview.api.approve_document(currentFileId, rules, payload);
+    if (!(await applyWorkflowResult(result, "Документ затверджено — можна експортувати"))) {
+      Loading.fail(job, result.error);
+      return;
+    }
+    Loading.complete(job, "Затверджено");
+  } catch (error) {
+    setStatus(error.message || "Помилка затвердження", true);
+    Loading.fail(job);
+  }
+}
+
+async function handleUnapprove() {
+  if (!currentFileId || currentExtension !== ".docx") {
+    setStatus("Файл не вибрано", true);
+    return;
+  }
+
+  if (currentDocumentSettings.approval_pending) {
+    await cancelApprovalPreviewFlow();
+    return;
+  }
+
+  if (!currentDocumentSettings.approved) {
+    setStatus("Документ ще не затверджено", true);
+    return;
+  }
+
+  const fileName = els.contentFilename.textContent || "Документ";
+  const job = Loading.start({ title: fileName, subtitle: "Скасування затвердження…" });
+
+  try {
+    if (!(await persistRulesFromEditor({ quiet: true }))) {
+      Loading.fail(job);
+      return;
+    }
+
+    const result = await window.pywebview.api.revert_document_approval(
+      currentFileId,
+      getEffectiveVariantRules(),
+      buildConditionValuesPayload(),
+    );
+
+    if (!(await applyWorkflowResult(result, "Затвердження скасовано — можна продовжувати редагування"))) {
+      Loading.fail(job, result.error);
+      return;
+    }
+    Loading.complete(job, "Скасовано");
+  } catch (error) {
+    setStatus(error.message || "Помилка скасування", true);
+    Loading.fail(job);
+  }
+}
+
 async function handleExport() {
   if (!currentFileId) {
     setStatus("Файл не вибрано", true);
@@ -896,7 +1750,13 @@ async function handleExport() {
   const job = Loading.start({ title: fileName, subtitle: "Підготовка до експорту…" });
 
   try {
-    if (currentExtension !== ".pdf") {
+    if (documentNeedsApproval() && !currentDocumentSettings.approved) {
+      setStatus("Спочатку затвердіть документ на вкладці «Перегляд»", true);
+      Loading.fail(job);
+      return;
+    }
+
+    if (currentExtension !== ".pdf" && !documentNeedsApproval()) {
       const html = collectEditableHtml();
       if (html) {
         Loading.update(job, { indeterminate: true, subtitle: "Збереження змін…" });
@@ -936,20 +1796,23 @@ function bindEvents() {
   els.uploadInput.addEventListener("change", handleUpload);
   bindDropZone(els.uploadBox);
   els.saveBtn.addEventListener("click", handleSave);
+  els.approveBtn?.addEventListener("click", handleApprove);
+  els.unapproveBtn?.addEventListener("click", handleUnapprove);
   els.exportBtn.addEventListener("click", handleExport);
 
-  els.tabPreview.addEventListener("click", () => setActiveTab("preview"));
+  els.tabPreview.addEventListener("click", () => {
+    void setActiveTab("preview");
+  });
   els.tabEdit?.addEventListener("click", () => {
-    if (!els.tabEdit.disabled) setActiveTab("edit");
+    if (!els.tabEdit.disabled) void setActiveTab("edit");
   });
 
   els.saveRulesBtn?.addEventListener("click", handleSaveRules);
   els.redetectRulesBtn?.addEventListener("click", handleRedetectRules);
-  els.addRuleBtn?.addEventListener("click", () => {
-    if (typeof VariantEditor !== "undefined" && VariantEditor.addRule) {
-      VariantEditor.addRule();
-    }
-  });
+  els.addRuleBtn?.addEventListener("click", handleAddRule);
+  els.addConditionBtn?.addEventListener("click", handleAddCondition);
+  els.sidebarToggle?.addEventListener("click", toggleSidebar);
+  els.sidebarExpand?.addEventListener("click", toggleSidebar);
 
   els.fileSearch.addEventListener("input", () => {
     renderAllFileLists(els.fileSearch.value);
@@ -977,6 +1840,8 @@ function waitForApi() {
 async function bootstrapApp({ setStatus, setProgress } = {}) {
   bindEvents();
   Theme.init();
+  applySidebarState();
+  initRulesPanelResize();
 
   setProgress?.(38);
   setStatus?.("Підключення до застосунку…");
@@ -995,6 +1860,7 @@ async function afterSplash() {
   if (allFiles.length > 0) {
     await openFile(allFiles[0].id, { silent: true });
   } else {
+    showWelcomePreview();
     setStatus("Готово");
   }
 }

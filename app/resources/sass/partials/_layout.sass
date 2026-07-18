@@ -10,6 +10,21 @@
     grid-template-columns: $sidebar-width 1fr
     grid-template-rows: $workspace-chrome-h 1fr
 
+  &.is-sidebar-collapsed
+    @media (min-width: 769px)
+      grid-template-columns: 1fr
+
+    .sidebar,
+    .workspace-chrome--sidebar
+      display: none
+
+    .workspace-chrome--main,
+    .content
+      grid-column: 1
+
+    .sidebar-toggle--expand
+      display: inline-flex
+
 .workspace-chrome
   display: flex
   align-items: center
@@ -19,13 +34,38 @@
 
 .workspace-chrome--sidebar
   display: none
-  padding: 0 16px
+  padding: 0 12px 0 16px
   border-right: 1px solid $border
+  justify-content: space-between
+  gap: 8px
 
   @media (min-width: 769px)
     display: flex
     grid-column: 1
     grid-row: 1
+
+.sidebar-toggle
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  width: 32px
+  height: 32px
+  padding: 0
+  border: 1px solid $border
+  border-radius: $radius
+  background: $surface
+  color: $text-muted
+  cursor: pointer
+  flex-shrink: 0
+  transition: background .15s ease, color .15s ease, border-color .15s ease
+
+  &:hover
+    background: $surface-muted
+    color: $text
+    border-color: $border-muted
+
+  &--expand
+    display: none
 
 .workspace-chrome--main
   padding: 0 16px

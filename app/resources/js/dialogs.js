@@ -48,10 +48,185 @@ const Dialogs = (() => {
     });
   }
 
+  function escapeHtmlAttr(text) {
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;");
+  }
+
+  function buildConditionForm(existing = null) {
+    const form = document.createElement("div");
+    form.className = "dialog-form";
+    form.innerHTML = `
+      <label class="dialog-field">
+        <span class="dialog-field-label">Назва умови</span>
+        <input type="text" class="dialog-field-input" id="dialog-cond-label" placeholder="Наприклад: Позичальник є VIP-клієнтом" maxlength="120">
+      </label>
+      <div class="dialog-field">
+        <span class="dialog-field-label">Варіанти відповіді</span>
+        <div class="dialog-option-list" id="dialog-cond-options"></div>
+        <button type="button" class="btn btn-sm dialog-add-option-btn" id="dialog-cond-add-option">+ Додати варіант</button>
+      </div>
+    `;
+
+    const optionsEl = form.querySelector("#dialog-cond-options");
+    const labelInput = form.querySelector("#dialog-cond-label");
+
+    function addOptionRow(value = "") {
+      const row = document.createElement("div");
+      row.className = "dialog-option-row";
+      row.innerHTML = `
+        <input type="text" class="dialog-field-input dialog-option-input" value="${escapeHtmlAttr(value)}" maxlength="40" placeholder="Варіант відповіді">
+        <button type="button" class="dialog-option-remove" aria-label="Прибрати варіант" title="Прибрати">×</button>
+      `;
+      row.querySelector(".dialog-option-remove").addEventListener("click", () => {
+        if (optionsEl.children.length <= 1) return;
+        row.remove();
+      });
+      optionsEl.appendChild(row);
+    }
+
+    const initialOptions = existing?.options?.length
+      ? existing.options.map((option) => option.label)
+      : existing?.type === "boolean"
+        ? ["Так", "Ні"]
+        : ["Так", "Ні"];
+
+    initialOptions.forEach(addOptionRow);
+    if (existing?.label) labelInput.value = existing.label;
+
+    form.querySelector("#dialog-cond-add-option").addEventListener("click", () => {
+      addOptionRow();
+      optionsEl.lastElementChild?.querySelector("input")?.focus();
+    });
+
+    function readPayload() {
+      const label = labelInput.value.trim();
+      const optionLabels = [...optionsEl.querySelectorAll(".dialog-option-input")]
+        .map((input) => input.value.trim())
+        .filter(Boolean);
+
+      if (!label) {
+        labelInput.focus();
+        return null;
+      }
+      if (!optionLabels.length) return null;
+
+      const seen = new Set();
+      const options = optionLabels.map((optionLabel, index) => {
+        let value = optionLabel
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}]+/gu, "-")
+          .replace(/^-+|-+$/g, "");
+        if (!value) value = `opt-${index + 1}`;
+        let unique = value;
+        let suffix = 2;
+        while (seen.has(unique)) {
+          unique = `${value}-${suffix}`;
+          suffix += 1;
+        }
+        seen.add(unique);
+        return { value: unique, label: optionLabel };
+      });
+
+      const isBoolean =
+        options.length === 2 &&
+        options.some((option) => option.label.toLowerCase() === "так") &&
+        options.some((option) => option.label.toLowerCase() === "ні");
+
+      return {
+        label,
+        type: isBoolean ? "boolean" : "choice",
+        options: isBoolean ? undefined : options,
+      };
+    }
+
+    return { form, labelInput, readPayload };
+  }
+
+  function openConditionDialog({ title, message, confirmText, existing = null }) {
+    ensure();
+
+    lastFocus = document.activeElement;
+    dismissResult = null;
+
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    detailEl.hidden = true;
+
+    const iconEl = root.querySelector("#dialog-icon");
+    iconEl.className = "dialog-icon dialog-icon--default";
+    iconEl.innerHTML = iconFor("default");
+
+    footerEl.innerHTML = "";
+    footerEl.classList.remove("dialog-footer--triple");
+
+    root.querySelector(".dialog-form")?.remove();
+    const { form, labelInput, readPayload } = buildConditionForm(existing);
+    detailEl.insertAdjacentElement("afterend", form);
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn btn-sm dialog-btn-cancel";
+    cancelBtn.textContent = "Скасувати";
+    cancelBtn.addEventListener("click", () => close(null));
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "btn btn-sm btn-primary dialog-btn-confirm";
+    confirmBtn.textContent = confirmText;
+    confirmBtn.addEventListener("click", () => {
+      const payload = readPayload();
+      if (!payload) return;
+
+      if (existing?.id) {
+        close({ ...existing, ...payload, id: existing.id });
+        return;
+      }
+
+      close({
+        id: `cond-${Math.random().toString(16).slice(2, 10)}`,
+        ...payload,
+      });
+    });
+
+    footerEl.append(cancelBtn, confirmBtn);
+    root.hidden = false;
+    document.body.classList.add("dialog-open");
+    labelInput.focus();
+
+    return new Promise((resolve) => {
+      resolveFn = (result) => {
+        form.remove();
+        resolve(result);
+      };
+    });
+  }
+
+  function promptConditionCreate() {
+    return openConditionDialog({
+      title: "Нова умова",
+      message: "Створіть умову та варіанти відповідей для правил документа.",
+      confirmText: "Створити",
+    });
+  }
+
+  function promptConditionEdit(existing) {
+    return openConditionDialog({
+      title: "Редагувати умову",
+      message: "Оновіть назву та варіанти відповідей.",
+      confirmText: "Зберегти",
+      existing,
+    });
+  }
+
   function close(result) {
     if (!root || root.hidden) return;
     root.hidden = true;
     document.body.classList.remove("dialog-open");
+    footerEl?.classList.remove("dialog-footer--triple");
+    root.querySelector(".dialog-form")?.remove();
     footerEl?.classList.remove("dialog-footer--triple");
     const done = resolveFn;
     resolveFn = null;
@@ -178,5 +353,5 @@ const Dialogs = (() => {
     });
   }
 
-  return { confirm, confirmUnsaved, alert };
+  return { confirm, confirmUnsaved, alert, promptConditionCreate, promptConditionEdit };
 })();

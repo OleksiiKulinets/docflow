@@ -84,6 +84,108 @@ class DocFlowApi:
         except Exception as exc:
             return self._fail(exc)
 
+    def apply_condition_setting(
+        self,
+        file_id: str,
+        condition_id: str,
+        value,
+        rules: dict | None = None,
+        all_condition_values: dict | None = None,
+    ) -> dict:
+        try:
+            data = file_service.apply_condition_setting(
+                file_id,
+                condition_id,
+                value,
+                rules=rules,
+                all_condition_values=all_condition_values,
+            )
+            return self._ok(self._encode(data))
+        except Exception as exc:
+            return self._fail(exc)
+
+    def clear_condition_setting(
+        self,
+        file_id: str,
+        condition_id: str,
+        rules: dict | None = None,
+        all_condition_values: dict | None = None,
+    ) -> dict:
+        try:
+            data = file_service.clear_condition_setting(
+                file_id,
+                condition_id,
+                rules=rules,
+                all_condition_values=all_condition_values,
+            )
+            return self._ok(self._encode(data))
+        except Exception as exc:
+            return self._fail(exc)
+
+    def approve_document(
+        self,
+        file_id: str,
+        rules: dict | None = None,
+        all_condition_values: dict | None = None,
+    ) -> dict:
+        try:
+            data = file_service.approve_document(
+                file_id,
+                rules=rules,
+                all_condition_values=all_condition_values,
+            )
+            return self._ok(self._encode(data))
+        except Exception as exc:
+            return self._fail(exc)
+
+    def preview_approval_document(
+        self,
+        file_id: str,
+        rules: dict | None = None,
+        all_condition_values: dict | None = None,
+    ) -> dict:
+        try:
+            data = file_service.preview_approval_document(
+                file_id,
+                rules=rules,
+                all_condition_values=all_condition_values,
+            )
+            return self._ok(self._encode(data))
+        except Exception as exc:
+            return self._fail(exc)
+
+    def cancel_approval_preview(
+        self,
+        file_id: str,
+        rules: dict | None = None,
+        all_condition_values: dict | None = None,
+    ) -> dict:
+        try:
+            data = file_service.cancel_approval_preview(
+                file_id,
+                rules=rules,
+                all_condition_values=all_condition_values,
+            )
+            return self._ok(self._encode(data))
+        except Exception as exc:
+            return self._fail(exc)
+
+    def revert_document_approval(
+        self,
+        file_id: str,
+        rules: dict | None = None,
+        all_condition_values: dict | None = None,
+    ) -> dict:
+        try:
+            data = file_service.revert_document_approval(
+                file_id,
+                rules=rules,
+                all_condition_values=all_condition_values,
+            )
+            return self._ok(self._encode(data))
+        except Exception as exc:
+            return self._fail(exc)
+
     def get_edit_view(self, file_id: str, html_b64: str | None = None) -> dict:
         try:
             data = file_service.get_edit_view(file_id, html_b64)
@@ -94,6 +196,13 @@ class DocFlowApi:
     def get_preview_from_html(self, file_id: str, html_b64: str) -> dict:
         try:
             data = file_service.get_preview_from_html(file_id, html_b64)
+            return self._ok(self._encode(data))
+        except Exception as exc:
+            return self._fail(exc)
+
+    def sync_document_source(self, file_id: str, html_b64: str) -> dict:
+        try:
+            data = file_service.sync_document_source(file_id, html_b64)
             return self._ok(self._encode(data))
         except Exception as exc:
             return self._fail(exc)

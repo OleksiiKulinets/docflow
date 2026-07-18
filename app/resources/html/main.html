@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../sass/main.css">
+  <link rel="icon" href="../icon.ico" type="image/x-icon">
   <title>DocFlow</title>
   <script>
     (function () {
@@ -84,13 +85,23 @@
   </div>
 </header>
 
-<div class="page">
+<div class="page" id="page">
   <div class="workspace-chrome workspace-chrome--sidebar">
     <h2 class="workspace-chrome-title">Документи</h2>
+    <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-expanded="true" aria-controls="file-sidebar" title="Сховати панель файлів">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M10.22 3.22a.75.75 0 0 1 0 1.06L7.06 7.44H14.5a.75.75 0 0 1 0 1.5H7.06l3.16 3.16a.75.75 0 0 1-1.06 1.06l-4.5-4.5a.75.75 0 0 1 0-1.06l4.5-4.5a.75.75 0 0 1 1.06 0Z"/>
+      </svg>
+    </button>
   </div>
 
   <div class="content-toolbar workspace-chrome workspace-chrome--main">
     <div class="content-toolbar-left">
+      <button class="sidebar-toggle sidebar-toggle--expand" id="sidebar-expand" type="button" hidden aria-expanded="false" aria-controls="file-sidebar" title="Показати панель файлів">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M5.78 3.22a.75.75 0 0 0 0 1.06L8.94 7.44H1.5a.75.75 0 0 0 0 1.5h7.44l-3.16 3.16a.75.75 0 0 0 1.06 1.06l4.5-4.5a.75.75 0 0 0 0-1.06l-4.5-4.5a.75.75 0 0 0-1.06 0Z"/>
+        </svg>
+      </button>
       <span class="content-filename">Файл не вибрано</span>
       <nav class="tab-nav" aria-label="Вкладки перегляду">
         <button class="tab-nav-item is-active" id="tab-preview" type="button">Перегляд</button>
@@ -98,12 +109,22 @@
       </nav>
     </div>
     <div class="content-toolbar-actions">
-      <button class="btn btn-sm" id="save-btn" type="button">Зберегти</button>
-      <button class="btn btn-primary btn-sm" id="export-btn" type="button" disabled>Експорт</button>
+      <div class="toolbar-group" aria-label="Збереження">
+        <button class="btn btn-sm" id="save-btn" type="button">Зберегти</button>
+      </div>
+      <div class="toolbar-sep" id="toolbar-workflow-sep" hidden aria-hidden="true"></div>
+      <div class="toolbar-group toolbar-group--workflow" id="toolbar-workflow" hidden aria-label="Затвердження">
+        <button class="btn btn-sm btn-accent" id="approve-btn" type="button" disabled>Затвердити</button>
+        <button class="btn btn-sm btn-ghost" id="unapprove-btn" type="button" hidden>Скасувати</button>
+      </div>
+      <div class="toolbar-sep" id="toolbar-export-sep" hidden aria-hidden="true"></div>
+      <div class="toolbar-group" id="toolbar-export" hidden aria-label="Експорт">
+        <button class="btn btn-primary btn-sm" id="export-btn" type="button" disabled>Експорт</button>
+      </div>
     </div>
   </div>
 
-  <aside class="sidebar">
+  <aside class="sidebar" id="file-sidebar">
     <section class="sidebar-section sidebar-section-upload">
       <h2 class="sidebar-title sidebar-title--mobile">Завантаження</h2>
       <label class="upload-box">
@@ -234,30 +255,50 @@
     <div class="preview-panel" id="preview-panel">
       <aside class="conditions-panel" id="conditions-panel" aria-hidden="true">
         <div class="conditions-panel-head">
-          <h3 class="conditions-panel-title">Умови документа</h3>
-          <p class="conditions-panel-sub">Оберіть відповіді — зміст документа оновиться одразу.</p>
+          <h3 class="conditions-panel-title">Умови</h3>
         </div>
         <div class="conditions-list" id="conditions-list"></div>
       </aside>
 
       <aside class="rules-panel" id="rules-panel" aria-hidden="true">
         <div class="rules-panel-head">
-          <h3 class="rules-panel-title">Правила документа</h3>
-          <p class="rules-panel-sub">Створіть правило, оберіть умову та привʼяжіть підпункти з варіантами.</p>
           <div class="rules-panel-toolbar">
-            <button class="btn btn-sm" id="redetect-rules-btn" type="button" title="Оновити структуру з документа">Оновити</button>
+            <button class="btn btn-sm" id="redetect-rules-btn" type="button" title="Скинути всі правила">↻</button>
             <button class="btn btn-primary btn-sm" id="save-rules-btn" type="button">Зберегти</button>
-            <button class="btn btn-sm btn-accent" id="add-rule-btn" type="button">Додати правило</button>
           </div>
         </div>
         <div class="rules-panel-scroll">
-          <div id="rules-tree"></div>
+          <div class="rules-editor" id="rules-editor">
+            <section class="rules-block rules-block--conditions">
+              <header class="rules-block-head">
+                <div class="rules-block-head-main">
+                  <h3 class="rules-block-title">Умови</h3>
+                  <p class="rules-block-sub">Питання так/ні або вибір для правил документа</p>
+                </div>
+                <button class="btn btn-sm btn-accent" id="add-condition-btn" type="button">+ Умова</button>
+              </header>
+              <div id="rules-conditions"></div>
+            </section>
+
+            <section class="rules-block rules-block--rules">
+              <header class="rules-block-head">
+                <div class="rules-block-head-main">
+                  <h3 class="rules-block-title">Правила</h3>
+                  <p class="rules-block-sub">Підпункт → варіанти → значення умови → текст</p>
+                </div>
+                <button class="btn btn-sm btn-accent" id="add-rule-btn" type="button">+ Правило</button>
+              </header>
+              <div id="rules-mode-banner"></div>
+              <div id="rules-tree"></div>
+            </section>
+          </div>
         </div>
       </aside>
 
-      <article class="markdown-body" id="preview">
-        <p class="preview-empty">Завантажте файл або виберіть його в боковій панелі.</p>
-      </article>
+      <div class="rules-panel-resizer" id="rules-panel-resizer" role="separator" aria-orientation="vertical"
+        aria-label="Змінити ширину панелі правил" tabindex="0" hidden></div>
+
+      <article class="markdown-body" id="preview"></article>
     </div>
   </main>
 </div>

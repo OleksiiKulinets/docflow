@@ -164,6 +164,7 @@
   overflow: hidden
   min-height: 0
   position: relative
+  --rules-panel-width: 420px
 
   &.is-edit
     flex-direction: row
@@ -179,21 +180,6 @@
     flex: 1
     min-width: 0
     min-height: 0
-
-    @media (prefers-reduced-motion: no-preference)
-      transition: opacity .28s cubic-bezier(.4, 0, .2, 1), transform .28s cubic-bezier(.4, 0, .2, 1)
-
-  &.is-tab-switching .markdown-body
-    @media (prefers-reduced-motion: no-preference)
-      opacity: .55
-
-  &.is-tab-switching.is-switching-to-edit .markdown-body
-    @media (prefers-reduced-motion: no-preference)
-      transform: translateX(10px)
-
-  &.is-tab-switching.is-switching-to-preview .markdown-body
-    @media (prefers-reduced-motion: no-preference)
-      transform: translateX(-10px)
 
   &.is-edit .markdown-body
     flex: 1
@@ -363,6 +349,8 @@
     border: 1px solid $border
 
   .docx-document
+    color: var(--doc-text)
+
     h1, h2, h3, h4, h5, h6
       border-bottom: none
       padding-bottom: 0
@@ -384,6 +372,18 @@
       font-style: inherit
       color: inherit
 
+    .docx-instruction
+      color: color-mix(in srgb, #c0392b 72%, var(--doc-text)) !important
+      opacity: .82
+      font-style: italic
+      border-left: 3px solid color-mix(in srgb, #c0392b 35%, transparent)
+      padding-left: 8px
+      margin-bottom: 8pt !important
+
+    .docx-instruction-text
+      color: color-mix(in srgb, #c0392b 68%, var(--doc-text)) !important
+      opacity: .85
+
   .docx-list
     margin: 0 0 8pt 24pt
     padding: 0
@@ -396,6 +396,352 @@
     page-break-after: always
     border-top: 1px dashed $border
     margin: 24pt 0
+
+// Animated empty workspace — living document stack
+.preview-panel .markdown-body:has(> .preview-empty-state)
+  display: flex
+  align-items: center
+  justify-content: center
+  background: $surface-muted
+
+.preview-empty-state
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  width: 100%
+  max-width: 440px
+  padding: 40px 28px 52px
+  text-align: center
+
+.preview-empty-scene
+  position: relative
+  width: 240px
+  height: 196px
+  margin-bottom: 26px
+
+.preview-empty-floaters
+  position: absolute
+  inset: 0
+  pointer-events: none
+  overflow: hidden
+
+  span
+    position: absolute
+    width: 5px
+    height: 5px
+    border-radius: 2px
+    background: color-mix(in srgb, $accent 55%, transparent)
+    opacity: 0
+    animation: empty-particle-rise 4.8s ease-in infinite
+
+    &:nth-child(1)
+      left: 18%
+      bottom: 8%
+      animation-delay: 0s
+
+    &:nth-child(2)
+      left: 72%
+      bottom: 14%
+      animation-delay: .8s
+      width: 4px
+      height: 4px
+
+    &:nth-child(3)
+      left: 44%
+      bottom: 4%
+      animation-delay: 1.6s
+
+    &:nth-child(4)
+      left: 86%
+      bottom: 22%
+      animation-delay: 2.2s
+      width: 3px
+      height: 3px
+
+    &:nth-child(5)
+      left: 8%
+      bottom: 28%
+      animation-delay: 3s
+
+    &:nth-child(6)
+      left: 58%
+      bottom: 18%
+      animation-delay: 3.8s
+      width: 4px
+      height: 4px
+
+.preview-empty-flow
+  position: absolute
+  left: 0
+  top: 50%
+  display: flex
+  align-items: center
+  gap: 6px
+  transform: translateY(-50%)
+  opacity: .85
+
+.preview-empty-flow-dot
+  width: 7px
+  height: 7px
+  border-radius: 50%
+  background: $accent
+  box-shadow: 0 0 10px color-mix(in srgb, $accent 45%, transparent)
+  animation: empty-flow-hop 1.8s ease-in-out infinite
+
+  &:nth-child(2)
+    animation-delay: .22s
+    opacity: .75
+    transform: scale(.85)
+
+  &:nth-child(3)
+    animation-delay: .44s
+    opacity: .55
+    transform: scale(.7)
+
+.preview-empty-stack
+  position: absolute
+  left: 50%
+  top: 52%
+  width: 128px
+  height: 158px
+  transform: translate(-42%, -50%)
+  transform-style: preserve-3d
+  animation: empty-stack-breathe 4.5s ease-in-out infinite
+
+.preview-empty-sheet
+  position: absolute
+  inset: 0
+  border-radius: 12px
+  background: $surface
+  border: 1px solid $border
+  box-shadow: 0 10px 28px var(--shadow-soft)
+
+  &--back2
+    transform: translate(-18px, 14px) rotate(-8deg) scale(.9)
+    opacity: .38
+    animation: empty-sheet-sway-2 5s ease-in-out infinite
+
+  &--back1
+    transform: translate(-9px, 7px) rotate(-4deg) scale(.95)
+    opacity: .62
+    animation: empty-sheet-sway-1 5s ease-in-out infinite .35s
+
+  &--front
+    padding: 16px 14px
+    overflow: hidden
+    animation: empty-sheet-lift 4.5s ease-in-out infinite
+
+.preview-empty-sheet-head
+  height: 9px
+  width: 46%
+  border-radius: 5px
+  background: linear-gradient(90deg, color-mix(in srgb, $accent 55%, $border), color-mix(in srgb, $accent 20%, $border))
+  margin-bottom: 14px
+
+.preview-empty-line
+  height: 6px
+  border-radius: 4px
+  background: color-mix(in srgb, $text-muted 28%, $border)
+  margin-bottom: 9px
+  transform-origin: left center
+  transform: scaleX(0)
+  animation: empty-line-write 3.6s ease-in-out infinite
+
+  &--1
+    width: 78%
+    animation-delay: 0s
+
+  &--2
+    width: 94%
+    animation-delay: .18s
+
+  &--3
+    width: 68%
+    animation-delay: .36s
+
+  &--4
+    width: 52%
+    margin-bottom: 0
+    animation-delay: .54s
+
+.preview-empty-line-row
+  display: flex
+  align-items: center
+  gap: 3px
+  min-height: 10px
+
+.preview-empty-cursor
+  width: 2px
+  height: 11px
+  border-radius: 1px
+  background: $accent
+  opacity: 0
+  animation: empty-cursor-blink 3.6s step-end infinite .54s
+
+.preview-empty-scan
+  position: absolute
+  left: 8px
+  right: 8px
+  height: 14px
+  border-radius: 8px
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, $accent 14%, transparent), transparent)
+  opacity: 0
+  animation: empty-scan-sweep 3.6s ease-in-out infinite
+
+.preview-empty-title
+  margin: 0 0 8px
+  font-size: 20px
+  font-weight: 600
+  letter-spacing: -.02em
+  color: $text
+  animation: empty-text-in .55s cubic-bezier(.22, 1, .36, 1) both
+
+.preview-empty-hint
+  margin: 0
+  font-size: 14px
+  line-height: 1.5
+  color: $text-muted
+  max-width: 34ch
+  animation: empty-text-in .55s cubic-bezier(.22, 1, .36, 1) .1s both
+
+.preview-empty-tags
+  display: flex
+  flex-wrap: wrap
+  justify-content: center
+  gap: 8px
+  margin-top: 20px
+  animation: empty-text-in .55s cubic-bezier(.22, 1, .36, 1) .2s both
+
+.preview-empty-tag
+  display: inline-flex
+  align-items: center
+  padding: 5px 12px
+  border: 1px solid $border
+  border-radius: 999px
+  background: $surface
+  font-size: 11px
+  font-weight: 600
+  letter-spacing: .05em
+  color: $text-muted
+  animation: empty-tag-cycle 4.2s ease-in-out infinite
+
+  &:nth-child(2)
+    animation-delay: .45s
+
+  &:nth-child(3)
+    animation-delay: .9s
+
+@keyframes empty-stack-breathe
+  0%, 100%
+    transform: translate(-42%, -50%) rotate(0deg)
+  50%
+    transform: translate(-42%, -52%) rotate(.6deg)
+@keyframes empty-sheet-sway-1
+  0%, 100%
+    transform: translate(-9px, 7px) rotate(-4deg) scale(.95)
+  50%
+    transform: translate(-11px, 5px) rotate(-5deg) scale(.95)
+@keyframes empty-sheet-sway-2
+  0%, 100%
+    transform: translate(-18px, 14px) rotate(-8deg) scale(.9)
+  50%
+    transform: translate(-20px, 12px) rotate(-9deg) scale(.9)
+@keyframes empty-sheet-lift
+  0%, 72%, 100%
+    transform: translateY(0) rotate(0deg)
+    box-shadow: 0 10px 28px var(--shadow-soft)
+  36%
+    transform: translateY(-5px) rotate(.8deg)
+    box-shadow: 0 18px 36px var(--shadow-medium)
+@keyframes empty-line-write
+  0%, 6%
+    transform: scaleX(0)
+    opacity: .25
+  16%, 58%
+    transform: scaleX(1)
+    opacity: 1
+  68%, 100%
+    transform: scaleX(1)
+    opacity: .35
+@keyframes empty-cursor-blink
+  0%, 52%, 54%, 56%, 100%
+    opacity: 0
+  53%, 55%
+    opacity: 1
+@keyframes empty-scan-sweep
+  0%, 12%
+    top: 18px
+    opacity: 0
+  20%
+    opacity: .85
+  62%
+    top: calc(100% - 28px)
+    opacity: .85
+  72%, 100%
+    top: calc(100% - 20px)
+    opacity: 0
+@keyframes empty-flow-hop
+  0%, 100%
+    transform: translateX(0) scale(1)
+    opacity: .35
+  40%
+    transform: translateX(14px) scale(1.05)
+    opacity: 1
+  70%
+    transform: translateX(26px) scale(.9)
+    opacity: .5
+@keyframes empty-particle-rise
+  0%
+    transform: translateY(0) scale(.6)
+    opacity: 0
+  12%
+    opacity: .75
+  100%
+    transform: translateY(-92px) scale(1)
+    opacity: 0
+@keyframes empty-text-in
+  from
+    opacity: 0
+    transform: translateY(12px)
+  to
+    opacity: 1
+    transform: translateY(0)
+@keyframes empty-tag-cycle
+  0%, 100%
+    color: $text-muted
+    border-color: $border
+    transform: translateY(0)
+  18%, 32%
+    color: $accent
+    border-color: color-mix(in srgb, $accent 40%, $border)
+    transform: translateY(-2px)
+    box-shadow: 0 6px 16px color-mix(in srgb, $accent 12%, transparent)
+
+@media (prefers-reduced-motion: reduce)
+  .preview-empty-floaters span,
+  .preview-empty-flow-dot,
+  .preview-empty-stack,
+  .preview-empty-sheet,
+  .preview-empty-line,
+  .preview-empty-cursor,
+  .preview-empty-scan,
+  .preview-empty-tag
+    animation: none !important
+
+  .preview-empty-line
+    transform: scaleX(1)
+    opacity: 1
+
+  .preview-empty-cursor
+    opacity: 1
+
+  .preview-empty-title,
+  .preview-empty-hint,
+  .preview-empty-tags
+    animation: none !important
+    opacity: 1
+    transform: none
 
 .pdf-preview
   flex: 1
