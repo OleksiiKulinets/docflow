@@ -1,0 +1,255 @@
+// Sidebar upload — Dropbox / Linear style drop zone
+
+.sidebar-upload-zone
+  position: relative
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  gap: $space-1
+  width: 100%
+  padding: $space-2 $space-2 $space-3
+  border: none
+  border-radius: $radius-md
+  background: color-mix(in srgb, $bg-input 92%, $accent 8%)
+  text-align: center
+  cursor: pointer
+  overflow: hidden
+  isolation: isolate
+  @include transition-interactive
+
+  &:hover
+    background: color-mix(in srgb, $accent 6%, $bg-input)
+
+    .upload-zone-shimmer
+      opacity: 0.55
+
+    .upload-file-chip
+      border-color: color-mix(in srgb, $accent 35%, $border)
+
+  &.is-dragover
+    background: $accent-subtle
+    box-shadow: 0 0 0 1px color-mix(in srgb, $accent 40%, transparent), 0 8px 28px color-mix(in srgb, $accent 18%, transparent)
+
+    .upload-zone-frame-rect
+      stroke: $accent
+      stroke-opacity: 1
+
+    .upload-file-chip
+      animation-duration: 1.1s
+      border-color: $accent
+
+    .upload-zone-shimmer
+      opacity: 0.85
+
+  input
+    position: absolute
+    inset: 0
+    z-index: 4
+    opacity: 0
+    cursor: pointer
+
+.upload-zone-frame
+  position: absolute
+  inset: 0
+  width: 100%
+  height: 100%
+  pointer-events: none
+  z-index: 0
+
+.upload-zone-frame-rect
+  fill: none
+  stroke: color-mix(in srgb, $accent 45%, $border)
+  stroke-width: 1.5
+  stroke-dasharray: 7 5
+  vector-effect: non-scaling-stroke
+  stroke-opacity: 0.65
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: upload-border-march 14s linear infinite
+
+.upload-zone-shimmer
+  position: absolute
+  inset: -40% -60%
+  z-index: 1
+  pointer-events: none
+  opacity: 0
+  background: linear-gradient(
+    105deg,
+    transparent 42%,
+    color-mix(in srgb, $accent 16%, transparent) 50%,
+    transparent 58%
+  )
+  transform: translateX(-30%) rotate(8deg)
+  @include transition-interactive
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: upload-shimmer-sweep 5s ease-in-out infinite
+
+.upload-stage
+  position: relative
+  z-index: 2
+  display: flex
+  flex-direction: column
+  align-items: center
+  width: 100%
+  height: 72px
+  margin-bottom: $space-1
+  pointer-events: none
+
+.upload-tray
+  position: absolute
+  bottom: 2px
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 44px
+  height: 28px
+  border-radius: 0 0 $radius-sm $radius-sm
+  border: 1px solid $border
+  border-top: none
+  background: color-mix(in srgb, $bg-panel 80%, transparent)
+  color: $text-tertiary
+  box-shadow: inset 0 1px 0 color-mix(in srgb, $accent 12%, transparent)
+
+  svg
+    display: block
+    margin-top: 2px
+
+.upload-file-chip
+  position: absolute
+  left: 50%
+  width: 34px
+  height: 42px
+  margin-left: -17px
+  border-radius: 6px
+  border: 1px solid $border
+  background: linear-gradient(180deg, $bg-panel 0%, $bg-input 100%)
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22)
+  @include transition-interactive
+
+  &::before
+    content: ""
+    display: block
+    width: 14px
+    height: 3px
+    margin: 9px auto 0
+    border-radius: 2px
+    background: color-mix(in srgb, $accent 55%, $border)
+
+  &::after
+    content: ""
+    display: block
+    width: 20px
+    height: 2px
+    margin: 5px auto 0
+    border-radius: 2px
+    background: $border
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: upload-file-drop 2.8s cubic-bezier(0.45, 0, 0.2, 1) infinite
+
+.upload-file-chip--a
+  animation-delay: 0s
+
+.upload-file-chip--b
+  width: 30px
+  height: 38px
+  margin-left: -15px
+  opacity: 0.72
+  animation-delay: 1.4s
+
+.sidebar-upload-title
+  position: relative
+  z-index: 2
+  display: block
+  font: var(--weight-semibold) var(--text-caption)/var(--leading-tight) $font
+  color: $text
+
+.sidebar-upload-hint
+  position: relative
+  z-index: 2
+  display: block
+  max-width: 24ch
+  margin: 0 auto
+  font: var(--weight-regular) 11px/var(--leading-normal) $font
+  color: $text-tertiary
+
+.upload-format-tags
+  position: relative
+  z-index: 2
+  display: flex
+  flex-wrap: wrap
+  justify-content: center
+  gap: 6px
+  margin-top: $space-2
+
+.upload-format-tag
+  display: inline-flex
+  align-items: center
+  padding: 2px 8px
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: color-mix(in srgb, $bg-panel 88%, transparent)
+  font: var(--weight-medium) 10px/1.4 $font-mono
+  letter-spacing: 0.04em
+  color: $text-tertiary
+  @include transition-interactive
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: upload-tag-glow 4.2s ease-in-out infinite
+
+  &:nth-child(2)
+    animation-delay: 0.6s
+
+  &:nth-child(3)
+    animation-delay: 1.2s
+
+@keyframes upload-border-march
+  to
+    stroke-dashoffset: -48
+
+@keyframes upload-shimmer-sweep
+  0%, 72%, 100%
+    transform: translateX(-35%) rotate(8deg)
+    opacity: 0
+  18%, 42%
+    opacity: 0.45
+  30%
+    transform: translateX(35%) rotate(8deg)
+
+@keyframes upload-file-drop
+  0%
+    top: 0
+    opacity: 0
+    transform: translateY(0) scale(0.92) rotate(-4deg)
+  12%
+    opacity: 1
+  55%
+    top: 18px
+    opacity: 1
+    transform: translateY(0) scale(1) rotate(0deg)
+  72%
+    top: 24px
+    opacity: 0
+    transform: translateY(4px) scale(0.88) rotate(2deg)
+  100%
+    top: 0
+    opacity: 0
+    transform: translateY(0) scale(0.92) rotate(-4deg)
+
+@keyframes upload-tag-glow
+  0%, 100%
+    color: $text-tertiary
+    border-color: $border
+    box-shadow: none
+  20%, 34%
+    color: $accent
+    border-color: color-mix(in srgb, $accent 40%, $border)
+    box-shadow: 0 0 12px color-mix(in srgb, $accent 16%, transparent)
+
+@media (prefers-reduced-motion: reduce)
+  .upload-zone-frame-rect,
+  .upload-zone-shimmer,
+  .upload-file-chip,
+  .upload-format-tag
+    animation: none !important

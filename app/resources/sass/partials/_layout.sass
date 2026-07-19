@@ -1,10 +1,11 @@
-// Page layout
+// Page grid
 .page
   flex: 1
   display: grid
   overflow: hidden
   grid-template-columns: 1fr
   grid-template-rows: auto auto 1fr
+  background: $bg
 
   @media (min-width: 769px)
     grid-template-columns: $sidebar-width 1fr
@@ -28,16 +29,17 @@
 .workspace-chrome
   display: flex
   align-items: center
-  background: $surface
+  background: $bg-panel
   border-bottom: 1px solid $border
   min-height: $workspace-chrome-h
 
 .workspace-chrome--sidebar
   display: none
-  padding: 0 12px 0 16px
+  padding: 0 $space-2
   border-right: 1px solid $border
   justify-content: space-between
-  gap: 8px
+  gap: $space-1
+  background: $bg-sidebar
 
   @media (min-width: 769px)
     display: flex
@@ -45,32 +47,18 @@
     grid-row: 1
 
 .sidebar-toggle
-  display: inline-flex
-  align-items: center
-  justify-content: center
-  width: 32px
-  height: 32px
+  @include btn-ghost
+  width: $control-height
+  min-width: $control-height
   padding: 0
-  border: 1px solid $border
-  border-radius: $radius
-  background: $surface
-  color: $text-muted
-  cursor: pointer
-  flex-shrink: 0
-  transition: background .15s ease, color .15s ease, border-color .15s ease
-
-  &:hover
-    background: $surface-muted
-    color: $text
-    border-color: $border-muted
 
   &--expand
     display: none
 
 .workspace-chrome--main
-  padding: 0 16px
+  padding: 0 $space-2
   justify-content: space-between
-  gap: 12px
+  gap: $space-2
   grid-column: 1
   grid-row: 1
 
@@ -79,9 +67,4 @@
     grid-row: 1
 
 .workspace-chrome-title
-  font-size: 13px
-  font-weight: 600
-  color: $text
-  line-height: 1
-
-// Sidebar
+  @include section-title

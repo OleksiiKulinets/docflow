@@ -1,0 +1,139 @@
+@mixin transition-interactive
+  transition: background-color $duration $ease, border-color $duration $ease, color $duration $ease, box-shadow $duration $ease, opacity $duration $ease
+
+@mixin focus-ring
+  outline: none
+  border-color: $border-focus
+  box-shadow: 0 0 0 3px $accent-subtle
+
+@mixin control-shell
+  height: $control-height
+  min-height: $control-height
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: $bg-input
+  color: $text
+  font: var(--weight-regular) var(--text-body)/var(--leading-normal) $font
+  @include transition-interactive
+
+@mixin btn-base
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  gap: $space-1
+  height: $control-height
+  min-height: $control-height
+  padding: 0 $space-2
+  border-radius: $radius-sm
+  border: 1px solid transparent
+  font: var(--weight-medium) var(--text-caption)/var(--leading-tight) $font
+  white-space: nowrap
+  cursor: pointer
+  @include transition-interactive
+
+  &:disabled
+    opacity: 0.45
+    cursor: not-allowed
+
+@mixin btn-secondary
+  @include btn-base
+  color: $text
+  background: $bg-panel
+  border-color: $border-strong
+
+  &:hover:not(:disabled)
+    background: $bg-hover
+    border-color: $border-strong
+
+  &:active:not(:disabled)
+    background: $bg-active
+
+@mixin btn-primary
+  @include btn-base
+  color: #FFFFFF
+  background: $accent
+  border-color: transparent
+
+  &:hover:not(:disabled)
+    background: $accent-emphasis
+
+  &:active:not(:disabled)
+    background: $accent-pressed
+
+@mixin btn-ghost
+  @include btn-base
+  color: $text-secondary
+  background: transparent
+  border-color: transparent
+
+  &:hover:not(:disabled)
+    color: $text
+    background: $bg-hover
+
+  &:active:not(:disabled)
+    background: $bg-active
+
+@mixin section-title
+  font: var(--weight-semibold) var(--text-section)/var(--leading-tight) $font
+  color: $text
+
+@mixin page-title
+  font: var(--weight-semibold) var(--text-page)/var(--leading-tight) $font
+  color: $text
+
+@mixin caption
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+  color: $text-secondary
+
+@mixin segment-control-shell
+  display: flex
+  align-items: stretch
+  width: 100%
+  gap: 3px
+  padding: 3px
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: $bg-input
+
+@mixin segment-option-base
+  position: relative
+  flex: 1
+  min-width: 0
+  cursor: pointer
+
+  input
+    position: absolute
+    inset: 0
+    width: 100%
+    height: 100%
+    margin: 0
+    opacity: 0
+    cursor: pointer
+
+  .segment-option-label,
+  span:not(.segment-option-label)
+    display: flex
+    align-items: center
+    justify-content: center
+    min-height: calc(#{$control-height} - 6px)
+    padding: 0 $space-1
+    border-radius: calc(#{$radius-sm} - 2px)
+    font: var(--weight-medium) var(--text-caption)/var(--leading-tight) $font
+    color: $text-secondary
+    @include transition-interactive
+
+  &:hover .segment-option-label,
+  &:hover span:not(.segment-option-label)
+    color: $text
+    background: $bg-hover
+
+  input:checked + .segment-option-label,
+  input:checked + span:not(.segment-option-label)
+    color: $text
+    background: $bg-active
+    font-weight: var(--weight-semibold)
+    box-shadow: var(--shadow-sm)
+
+  input:focus-visible + .segment-option-label,
+  input:focus-visible + span:not(.segment-option-label)
+    @include focus-ring

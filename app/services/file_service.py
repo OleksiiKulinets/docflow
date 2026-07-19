@@ -364,6 +364,8 @@ def get_file_bytes(file_id: str) -> tuple[dict, bytes]:
     entry = _require_entry(file_id)
     path = _require_path(entry)
     _require_export_ready(entry, path)
+    if entry["extension"] == ".docx":
+        document_service.refresh_docx_for_export(path)
     return entry, _files.read_bytes(entry["stored_name"])
 
 

@@ -503,3 +503,28 @@ def test_legacy_when_values_repaired():
     out = apply_variant_rules(html, rules, condition_values={"vehicle": "tak"})
     assert "Yes" in out
     assert "No" not in out
+
+
+def test_merge_edited_into_source_removes_deleted_blocks():
+    from docflow_docx.structure import (
+        collect_top_level_block_ids,
+        merge_edited_into_source,
+    )
+
+    source = annotate_blocks(
+        '<p data-block-id="a">Keep</p>'
+        '<p data-block-id="b">Remove me</p>'
+        '<p data-block-id="c">Also keep</p>'
+    )
+    edited = annotate_blocks(
+        '<p data-block-id="a">Keep</p>'
+        '<p data-block-id="c">Also keep</p>'
+    )
+    deletable = collect_top_level_block_ids(source)
+    merged = merge_edited_into_source(source, edited, deletable_block_ids=deletable)
+    assert "Keep" in merged
+    assert "Also keep" in merged
+    assert "Remove me" not in merged
+
+    merged_fallback = merge_edited_into_source(source, edited)
+    assert "Remove me" not in merged_fallback

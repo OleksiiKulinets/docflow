@@ -1,4 +1,5 @@
 let currentFileId = null;
+let currentFileName = null;
 let currentContent = "";
 let currentDocumentSettings = {};
 let applyingDocumentSetting = false;
@@ -50,7 +51,7 @@ function applyFileResult(result, { fileId, token } = {}) {
   sessionInnerHtml = null;
 
   els.breadcrumb.textContent = meta.name;
-  els.contentFilename.textContent = meta.name;
+  currentFileName = meta.name;
   if (!setPreviewHtml(previewHtml)) {
     setStatus("Документ не відобразився — спробуйте ще раз", true);
   } else {
@@ -172,14 +173,19 @@ function escapeHtml(text) {
   return AppUtils.escapeHtml(text);
 }
 
+function getDocumentTitle(fallback = "Документ") {
+  return currentFileName || fallback;
+}
+
 function captureSessionDocument() {
-  if (currentExtension !== ".docx" || activeTab !== "preview") return;
+  if (currentExtension !== ".docx" || activeTab !== "preview") return null;
   const html = collectEditableHtml();
-  if (html?.trim()) {
+  if (html != null) {
     sessionInnerHtml = html;
     rulesViewStale = true;
     invalidatePreviewCache();
   }
+  return sessionInnerHtml;
 }
 
 async function syncDocumentSource({ html = null, quiet = false } = {}) {
@@ -213,46 +219,34 @@ async function syncDocumentSource({ html = null, quiet = false } = {}) {
   return true;
 }
 
-function emptyPreviewMarkup({
+function workspaceEmptyMarkup({
   title = "Почніть з документа",
-  hint = "Перетягніть файл у бокову панель або оберіть зі списку зліва",
+  hint = "Оберіть файл зліва або перетягніть його в зону завантаження",
+  showGuide = true,
 } = {}) {
+  const visual = showGuide
+    ? `
+      <div class="workspace-empty-visual" aria-hidden="true">
+        <span class="workspace-empty-glow"></span>
+        <svg class="workspace-empty-route" viewBox="0 0 260 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path class="workspace-empty-route-path" d="M236 44C180 44 140 44 92 44C62 44 42 44 24 44"/>
+          <circle class="workspace-empty-route-dot" r="4" cx="0" cy="0"/>
+        </svg>
+        <span class="workspace-empty-doc"></span>
+      </div>`
+    : "";
+
   return `
-    <div class="preview-empty-state" role="status" aria-live="polite">
-      <div class="preview-empty-scene" aria-hidden="true">
-        <div class="preview-empty-floaters">
-          <span></span><span></span><span></span><span></span><span></span><span></span>
-        </div>
-        <div class="preview-empty-flow" aria-hidden="true">
-          <span class="preview-empty-flow-dot"></span>
-          <span class="preview-empty-flow-dot"></span>
-          <span class="preview-empty-flow-dot"></span>
-        </div>
-        <div class="preview-empty-stack">
-          <div class="preview-empty-sheet preview-empty-sheet--back2"></div>
-          <div class="preview-empty-sheet preview-empty-sheet--back1"></div>
-          <div class="preview-empty-sheet preview-empty-sheet--front">
-            <div class="preview-empty-sheet-head"></div>
-            <div class="preview-empty-line preview-empty-line--1"></div>
-            <div class="preview-empty-line preview-empty-line--2"></div>
-            <div class="preview-empty-line preview-empty-line--3"></div>
-            <div class="preview-empty-line-row">
-              <div class="preview-empty-line preview-empty-line--4"></div>
-              <span class="preview-empty-cursor"></span>
-            </div>
-            <div class="preview-empty-scan"></div>
-          </div>
-        </div>
-      </div>
-      <h2 class="preview-empty-title">${escapeHtml(title)}</h2>
-      <p class="preview-empty-hint">${escapeHtml(hint)}</p>
-      <div class="preview-empty-tags" aria-hidden="true">
-        <span class="preview-empty-tag">DOCX</span>
-        <span class="preview-empty-tag">TXT</span>
-        <span class="preview-empty-tag">PDF</span>
-      </div>
+    <div class="workspace-empty" role="status" aria-live="polite">
+      ${visual}
+      <h2 class="workspace-empty-title">${escapeHtml(title)}</h2>
+      <p class="workspace-empty-hint">${escapeHtml(hint)}</p>
     </div>
   `;
+}
+
+function emptyPreviewMarkup(options = {}) {
+  return workspaceEmptyMarkup(options);
 }
 
 function showWelcomePreview() {
@@ -265,6 +259,7 @@ function setPreviewHtml(html) {
     els.preview.innerHTML = emptyPreviewMarkup({
       title: "Документ порожній",
       hint: "Файл відкрито, але вміст не завантажився",
+      showGuide: false,
     });
     return false;
   }
@@ -356,19 +351,11 @@ function clearEditor() {
   rulesEditorLoaded = false;
   sessionInnerHtml = null;
   cachedEditHtml = null;
-  if (wasEdit && isPreview && rulesEditorLoaded && typeof VariantEditor !== "undefined") {
-    currentDocumentSettings = {
-      ...currentDocumentSettings,
-      variant_rules: VariantEditor.getRules(),
-      has_configured_rules: VariantEditor.hasConfiguredRules(),
-      active_condition_ids: VariantEditor.getActiveConditionIds(),
-    };
-  }
 
   updateConditionsPanel();
   renderConditionsList();
   els.breadcrumb.textContent = "Файл не вибрано";
-  els.contentFilename.textContent = "Файл не вибрано";
+  currentFileName = null;
   els.preview.innerHTML = emptyPreviewMarkup();
   updateDocumentActions();
   els.saveBtn.disabled = false;
@@ -395,16 +382,27 @@ async function deleteFile(fileId, fileName) {
   });
   if (!confirmed) return;
 
-  const result = await window.pywebview.api.delete_file(fileId);
-  if (!result.ok) {
-    setStatus(result.error, true);
-    return;
+  const job = Loading.start({ title: fileName, subtitle: "Видалення…" });
+
+  try {
+    Loading.update(job, { indeterminate: true, subtitle: "Видалення файлу…" });
+    const result = await window.pywebview.api.delete_file(fileId);
+    if (!result.ok) {
+      setStatus(result.error, true);
+      Loading.fail(job, result.error);
+      return;
+    }
+
+    Loading.update(job, { progress: 72, subtitle: "Оновлення списку…" });
+    if (currentFileId === fileId) clearEditor();
+
+    await refreshFileList(els.fileSearch.value);
+    setStatus(`Видалено ${fileName}`);
+    Loading.complete(job, "Видалено");
+  } catch (error) {
+    setStatus(error.message || "Помилка видалення", true);
+    Loading.fail(job);
   }
-
-  if (currentFileId === fileId) clearEditor();
-
-  await refreshFileList(els.fileSearch.value);
-  setStatus(`Видалено ${fileName}`);
 }
 
 function invalidatePreviewCache() {
@@ -415,16 +413,51 @@ function runTabTransition(isEdit) {
   void isEdit;
 }
 
+const TAB_TRANSITION_MS = 170;
+let savedPreviewScrollTop = 0;
+let savedRulesPanelScrollTop = 0;
+
+function beginTabTransition() {
+  els.previewPanel?.classList.add("is-tab-transitioning");
+}
+
+function endTabTransition() {
+  window.setTimeout(() => {
+    els.previewPanel?.classList.remove("is-tab-transitioning");
+  }, TAB_TRANSITION_MS);
+}
+
+function captureTabScrollPositions(wasPreview, wasEdit) {
+  if (wasPreview && els.preview) {
+    savedPreviewScrollTop = els.preview.scrollTop;
+  }
+  if (wasEdit && els.rulesPanelScroll) {
+    savedRulesPanelScrollTop = els.rulesPanelScroll.scrollTop;
+  }
+}
+
+function restoreTabScrollPositions(isPreview, isEdit) {
+  requestAnimationFrame(() => {
+    if (isPreview && els.preview) {
+      els.preview.scrollTop = savedPreviewScrollTop;
+    }
+    if (isEdit && els.rulesPanelScroll) {
+      els.rulesPanelScroll.scrollTop = savedRulesPanelScrollTop;
+    }
+  });
+}
+
 async function setActiveTab(tab, options = {}) {
   const { skipPreviewReload = false } = options;
   const wasPreview = activeTab === "preview";
   const wasEdit = activeTab === "edit";
 
+  captureTabScrollPositions(wasPreview, wasEdit);
+  beginTabTransition();
+
   let pendingSyncHtml = null;
   if (wasPreview && tab !== "preview" && currentExtension === ".docx") {
-    captureSessionDocument();
-    pendingSyncHtml = sessionInnerHtml || collectEditableHtml();
-    if (pendingSyncHtml?.trim()) cachedPreviewHtml = pendingSyncHtml;
+    pendingSyncHtml = captureSessionDocument() || collectEditableHtml() || sessionInnerHtml;
   }
 
   activeTab = tab;
@@ -459,8 +492,17 @@ async function setActiveTab(tab, options = {}) {
   updateConditionsPanel();
 
   if (isEdit && isDocx) {
-    await syncDocumentSource({ html: pendingSyncHtml, quiet: true });
-    await loadEditView({ force: true });
+    const synced = await syncDocumentSource({ html: pendingSyncHtml, quiet: true });
+    if (!synced) {
+      setStatus("Не вдалося синхронізувати зміни з документом", true);
+    } else {
+      const editHtml = cachedEditHtml;
+      cachedEditHtml = null;
+      const shouldSyncRulesBaseline = rulesViewStale;
+      if (!mountRulesEditor(editHtml, { syncRulesBaseline: shouldSyncRulesBaseline })) {
+        await loadEditView({ force: true });
+      }
+    }
   } else if (isPreview && isDocx && currentFileId && !skipPreviewReload) {
     if (wasEdit) {
       await persistRulesFromEditor({ quiet: true });
@@ -471,6 +513,8 @@ async function setActiveTab(tab, options = {}) {
   }
 
   renderConditionsList();
+  restoreTabScrollPositions(isPreview, isEdit);
+  endTabTransition();
 }
 
 async function reloadPreviewFromServer() {
@@ -727,6 +771,33 @@ async function loadEditView({ force = false } = {}) {
   }
 }
 
+function mountRulesEditor(editHtml, { syncRulesBaseline = false } = {}) {
+  if (!editHtml?.trim()) return false;
+  if (!setPreviewHtml(editHtml)) return false;
+
+  VariantEditor.init({
+    previewEl: els.preview,
+    conditionsEl: els.rulesConditions,
+    rulesTreeEl: els.rulesTree,
+    modeBannerEl: els.rulesModeBanner,
+    rulesEditorEl: els.rulesEditor,
+    statusFn: setStatus,
+    onRulesChange: syncPreviewConditionsFromEditor,
+  });
+  VariantEditor.setRules(currentDocumentSettings.variant_rules || {
+    schema_version: 3,
+    conditions: [],
+    rules: [],
+    entries: [],
+  });
+  VariantEditor.render();
+  rulesEditorLoaded = true;
+  rulesViewStale = false;
+  setStatus("Створіть умову, правило та пункти з документа");
+  if (syncRulesBaseline) Unsaved.syncRulesBaseline?.();
+  return true;
+}
+
 async function loadEditViewImpl({ force = false } = {}) {
   if (!force && rulesEditorLoaded && !rulesViewStale) {
     return;
@@ -737,27 +808,7 @@ async function loadEditViewImpl({ force = false } = {}) {
   if (!force && cachedEditHtml) {
     const html = cachedEditHtml;
     cachedEditHtml = null;
-    if (setPreviewHtml(html)) {
-      VariantEditor.init({
-        previewEl: els.preview,
-        conditionsEl: els.rulesConditions,
-        rulesTreeEl: els.rulesTree,
-        modeBannerEl: els.rulesModeBanner,
-        rulesEditorEl: els.rulesEditor,
-        statusFn: setStatus,
-        onRulesChange: syncPreviewConditionsFromEditor,
-      });
-      VariantEditor.setRules(currentDocumentSettings.variant_rules || {
-        schema_version: 3,
-        conditions: [],
-        rules: [],
-        entries: [],
-      });
-      VariantEditor.render();
-      rulesEditorLoaded = true;
-      rulesViewStale = false;
-      setStatus("Створіть умову, правило та пункти з документа");
-      if (syncRules) Unsaved.syncRulesBaseline();
+    if (mountRulesEditor(html, { syncRulesBaseline: syncRules })) {
       return;
     }
   }
@@ -771,27 +822,10 @@ async function loadEditViewImpl({ force = false } = {}) {
 
   currentDocumentSettings = result.document_settings || currentDocumentSettings;
   const editHtml = decodeApiHtml(result, "edit_html");
-  if (!setPreviewHtml(editHtml)) {
-    setStatus("Не вдалося завантажити документ для правил", true);
-    return;
-  }
   cachedEditHtml = editHtml;
-
-  VariantEditor.init({
-    previewEl: els.preview,
-    conditionsEl: els.rulesConditions,
-    rulesTreeEl: els.rulesTree,
-    modeBannerEl: els.rulesModeBanner,
-    rulesEditorEl: els.rulesEditor,
-    statusFn: setStatus,
-    onRulesChange: syncPreviewConditionsFromEditor,
-  });
-  VariantEditor.setRules(currentDocumentSettings.variant_rules);
-  VariantEditor.render();
-  rulesEditorLoaded = true;
-  rulesViewStale = false;
-  setStatus("Створіть умову, правило та пункти з документа");
-  if (syncRules) Unsaved.syncRulesBaseline();
+  if (!mountRulesEditor(editHtml, { syncRulesBaseline: syncRules })) {
+    setStatus("Не вдалося завантажити документ для правил", true);
+  }
 }
 
 async function handleSaveRules() {
@@ -889,6 +923,34 @@ async function handleRedetectRules() {
   setStatus("Правила очищено");
 }
 
+function applySaveResult(result) {
+  if (result.document_settings && Object.keys(result.document_settings).length) {
+    currentDocumentSettings = result.document_settings;
+    rulesViewStale = true;
+    updateConditionsPanel();
+    renderConditionsList();
+    updateEditTabState();
+  }
+
+  if (currentExtension === ".docx") {
+    if (result.edit_html) {
+      cachedEditHtml = decodeApiHtml(result, "edit_html");
+      rulesViewStale = false;
+    }
+    const previewHtml = decodeApiHtml(result, "preview_html");
+    if (previewHtml && activeTab === "preview") {
+      setPreviewHtml(previewHtml);
+      cachedPreviewHtml = previewHtml;
+      sessionInnerHtml = previewHtml;
+      if (typeof Editor !== "undefined") {
+        Editor.setEnabled(true);
+        Editor.prepareEditable?.();
+      }
+    } else if (activeTab === "preview") {
+      sessionInnerHtml = collectEditableHtml() || sessionInnerHtml;
+    }
+  }
+}
 function collectEditableHtml() {
   if (typeof Editor !== "undefined" && Editor.getHtml) {
     return Editor.getHtml();
@@ -911,18 +973,7 @@ async function saveAllPendingChanges({ quiet = false } = {}) {
         if (!quiet) setStatus(result.error, true);
         return false;
       }
-      if (result.document_settings && Object.keys(result.document_settings).length) {
-        currentDocumentSettings = result.document_settings;
-        rulesViewStale = true;
-        updateConditionsPanel();
-        renderConditionsList();
-        updateEditTabState();
-      }
-      if (currentExtension === ".docx" && result.edit_html) {
-        cachedEditHtml = decodeApiHtml(result, "edit_html");
-        sessionInnerHtml = htmlToSave || sessionInnerHtml;
-        rulesViewStale = false;
-      }
+      applySaveResult(result);
       await refreshFileList(els.fileSearch.value);
     }
   }
@@ -950,7 +1001,7 @@ async function saveAllPendingChanges({ quiet = false } = {}) {
 async function confirmDiscardUnsaved() {
   if (!Unsaved.hasChanges()) return true;
 
-  const fileName = els.contentFilename?.textContent || "Документ";
+  const fileName = getDocumentTitle();
   const choice = await Dialogs.confirmUnsaved({
     title: "DocFlow",
     message: "Зберегти зміни в документі?",
@@ -1137,14 +1188,14 @@ function renderBooleanConditionCard(condition, index) {
         <span class="condition-card-label">Умова ${index + 1}</span>
         <h4 class="condition-card-title">${escapeHtml(condition.label)}?</h4>
       </header>
-      <div class="condition-card-options" role="group" aria-label="${escapeHtml(condition.label)}">
-        <label class="condition-option">
+      <div class="condition-card-options segment-control segment-control--branch" role="radiogroup" aria-label="${escapeHtml(condition.label)}">
+        <label class="condition-option segment-option segment-option--no">
           <input type="checkbox" class="condition-input" id="${inputIdBase}-no" data-condition="${condition.id}" data-value="false">
-          <span class="condition-option-pill">Ні</span>
+          <span class="condition-option-pill segment-option-label">Ні</span>
         </label>
-        <label class="condition-option">
+        <label class="condition-option segment-option segment-option--yes">
           <input type="checkbox" class="condition-input" id="${inputIdBase}-yes" data-condition="${condition.id}" data-value="true">
-          <span class="condition-option-pill">Так</span>
+          <span class="condition-option-pill segment-option-label">Так</span>
         </label>
       </div>
     </article>
@@ -1159,13 +1210,13 @@ function renderChoiceConditionCard(condition, index) {
         <span class="condition-card-label">Умова ${index + 1}</span>
         <h4 class="condition-card-title">${escapeHtml(condition.label)}?</h4>
       </header>
-      <div class="condition-card-options condition-card-options--multi" role="group" aria-label="${escapeHtml(condition.label)}">
+      <div class="condition-card-options segment-control condition-card-options--multi" role="radiogroup" aria-label="${escapeHtml(condition.label)}">
         ${options
           .map(
             (option, optionIndex) => `
-              <label class="condition-option">
+              <label class="condition-option segment-option">
                 <input type="checkbox" class="condition-input" id="condition-${condition.id}-${optionIndex}" data-condition="${condition.id}" data-value="${escapeHtml(option.value)}">
-                <span class="condition-option-pill">${escapeHtml(option.label)}</span>
+                <span class="condition-option-pill segment-option-label">${escapeHtml(option.label)}</span>
               </label>
             `,
           )
@@ -1548,20 +1599,7 @@ async function handleSave() {
     return;
   }
 
-  if (result.document_settings && Object.keys(result.document_settings).length) {
-    currentDocumentSettings = result.document_settings;
-    rulesViewStale = true;
-    updateConditionsPanel();
-    renderConditionsList();
-    updateEditTabState();
-  }
-
-  if (currentExtension === ".docx" && result.edit_html) {
-    cachedEditHtml = decodeApiHtml(result, "edit_html");
-    sessionInnerHtml = collectEditableHtml() || sessionInnerHtml;
-    rulesViewStale = false;
-  }
-
+  applySaveResult(result);
   await refreshFileList(els.fileSearch.value);
   setStatus(`Збережено ${result.file.name}`);
   Unsaved.reset();
@@ -1649,7 +1687,7 @@ async function handleApprove() {
 
   const rules = getEffectiveVariantRules();
   const payload = buildConditionValuesPayload();
-  const fileName = els.contentFilename.textContent || "Документ";
+  const fileName = getDocumentTitle();
 
   if (!currentDocumentSettings.approval_pending) {
     const job = Loading.start({ title: fileName, subtitle: "Формування перегляду…" });
@@ -1714,7 +1752,7 @@ async function handleUnapprove() {
     return;
   }
 
-  const fileName = els.contentFilename.textContent || "Документ";
+  const fileName = getDocumentTitle();
   const job = Loading.start({ title: fileName, subtitle: "Скасування затвердження…" });
 
   try {
@@ -1746,7 +1784,7 @@ async function handleExport() {
     return;
   }
 
-  const fileName = els.contentFilename.textContent || "Документ";
+  const fileName = getDocumentTitle();
   const job = Loading.start({ title: fileName, subtitle: "Підготовка до експорту…" });
 
   try {
@@ -1899,7 +1937,7 @@ window.DocFlow = {
         return;
       }
 
-      const fileName = els.contentFilename?.textContent || "Документ";
+      const fileName = getDocumentTitle();
       const choice = await Dialogs.confirmUnsaved({
         title: "DocFlow",
         message: "Зберегти зміни в документі?",

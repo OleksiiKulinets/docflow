@@ -1,61 +1,62 @@
-// Header
+// App header
 .header
-  height: 48px
+  height: $workspace-chrome-h
   display: flex
   align-items: center
-  gap: 16px
-  padding: 0 16px
-  background: $surface
+  gap: $space-2
+  padding: 0 $space-2
+  background: $bg
   border-bottom: 1px solid $border
   flex-shrink: 0
 
 .header-left
   display: flex
   align-items: center
-  gap: 12px
+  gap: $space-2
   min-width: 0
   flex: 1
 
 .header-brand
   display: flex
   align-items: center
-  gap: 8px
+  gap: $space-1
   text-decoration: none
   color: $text
-  font-weight: 600
-  font-size: 14px
+  @include page-title
+  font-size: var(--text-body)
   white-space: nowrap
   flex-shrink: 0
+  @include transition-interactive
 
   &:hover
-    color: $accent
+    color: $text-secondary
 
 .header-brand-mark
   display: flex
   align-items: center
   justify-content: center
-  width: 28px
-  height: 28px
+  width: $space-4
+  height: $space-4
   background: var(--header-mark-bg)
   color: var(--header-mark-fg)
-  border-radius: $radius
+  border-radius: $radius-sm
 
 .header-breadcrumb
   display: none
   align-items: center
-  gap: 4px
+  gap: $space-1
   min-width: 0
-  font-size: 14px
+  @include caption
 
   @media (min-width: 900px)
     display: flex
 
 .breadcrumb-sep
-  color: $text-subtle
+  color: $text-tertiary
 
 .breadcrumb-current
-  color: $text
-  font-weight: 600
+  color: $text-secondary
+  font-weight: var(--weight-medium)
   overflow: hidden
   text-overflow: ellipsis
   white-space: nowrap
@@ -63,8 +64,6 @@
 .header-right
   display: flex
   align-items: center
-  gap: 8px
+  gap: $space-1
   flex-shrink: 0
   margin-left: auto
-
-// Page layout

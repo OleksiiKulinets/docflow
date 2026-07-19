@@ -1,0 +1,149 @@
+// Workspace empty — ambient glow + animated route to sidebar
+
+.preview-panel .markdown-body:has(> .workspace-empty)
+  display: flex
+  align-items: center
+  justify-content: center
+  background: radial-gradient(ellipse 80% 60% at 50% 40%, color-mix(in srgb, $accent 5%, transparent), transparent 70%), $bg
+
+.workspace-empty
+  position: relative
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  width: 100%
+  max-width: 420px
+  padding: $space-4 $space-3
+  text-align: center
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: workspace-empty-in 520ms var(--ease-standard) both
+
+.workspace-empty-visual
+  position: relative
+  width: min(100%, 280px)
+  height: 88px
+  margin-bottom: $space-3
+  pointer-events: none
+
+.workspace-empty-glow
+  position: absolute
+  left: 8%
+  top: 50%
+  width: 120px
+  height: 120px
+  margin-top: -60px
+  border-radius: 50%
+  background: radial-gradient(circle, color-mix(in srgb, $accent 22%, transparent) 0%, transparent 68%)
+  filter: blur(8px)
+  opacity: 0.55
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: workspace-glow-drift 6s ease-in-out infinite
+
+.workspace-empty-route
+  position: absolute
+  inset: 0
+  width: 100%
+  height: 100%
+  overflow: visible
+
+.workspace-empty-route-path
+  fill: none
+  stroke: color-mix(in srgb, $accent 50%, $border)
+  stroke-width: 1.5
+  stroke-linecap: round
+  stroke-dasharray: 6 7
+  opacity: 0.75
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: workspace-route-march 2.4s linear infinite
+
+.workspace-empty-route-dot
+  fill: $accent
+  filter: drop-shadow(0 0 6px color-mix(in srgb, $accent 55%, transparent))
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: workspace-route-travel 2.4s ease-in-out infinite
+
+.workspace-empty-doc
+  position: absolute
+  right: 18%
+  top: 22px
+  width: 36px
+  height: 44px
+  border-radius: 7px
+  border: 1px solid $border
+  background: linear-gradient(165deg, $bg-panel, $bg-input)
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2)
+
+  &::before
+    content: ""
+    display: block
+    width: 16px
+    height: 3px
+    margin: 10px auto 0
+    border-radius: 2px
+    background: color-mix(in srgb, $accent 50%, $border)
+
+  @media (prefers-reduced-motion: no-preference)
+    animation: workspace-doc-float 4.5s ease-in-out infinite
+
+.workspace-empty-title
+  margin: 0 0 $space-1
+  font: var(--weight-semibold) var(--text-page)/var(--leading-tight) $font
+  color: $text
+  letter-spacing: -0.02em
+
+.workspace-empty-hint
+  margin: 0
+  max-width: 34ch
+  font: var(--weight-regular) var(--text-body)/var(--leading-normal) $font
+  color: $text-secondary
+
+@keyframes workspace-empty-in
+  from
+    opacity: 0
+    transform: translateY(10px)
+  to
+    opacity: 1
+    transform: translateY(0)
+
+@keyframes workspace-glow-drift
+  0%, 100%
+    transform: translateX(0) scale(1)
+    opacity: 0.45
+  50%
+    transform: translateX(12px) scale(1.08)
+    opacity: 0.7
+
+@keyframes workspace-route-march
+  to
+    stroke-dashoffset: -26
+
+@keyframes workspace-route-travel
+  0%
+    transform: translate(228px, 44px)
+    opacity: 0
+  8%
+    opacity: 1
+  88%
+    opacity: 1
+  100%
+    transform: translate(28px, 44px)
+    opacity: 0
+
+@keyframes workspace-doc-float
+  0%, 100%
+    transform: translateY(0) rotate(0deg)
+  50%
+    transform: translateY(-5px) rotate(-1.5deg)
+
+@media (prefers-reduced-motion: reduce)
+  .workspace-empty,
+  .workspace-empty-glow,
+  .workspace-empty-route-path,
+  .workspace-empty-route-dot,
+  .workspace-empty-doc
+    animation: none !important

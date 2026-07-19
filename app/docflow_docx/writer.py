@@ -44,9 +44,15 @@ def _append_node(doc: Document, node) -> None:
 
     name = node.name.lower()
 
-    if name == "div" and "docx-page-break" in (node.get("class") or []):
-        paragraph = doc.add_paragraph()
-        paragraph.add_run().add_break(WD_BREAK.PAGE)
+    if name == "div":
+        classes = node.get("class") or []
+        if "docx-page-break" in classes:
+            paragraph = doc.add_paragraph()
+            paragraph.add_run().add_break(WD_BREAK.PAGE)
+            return
+
+        for child in node.children:
+            _append_node(doc, child)
         return
 
     if name in {"p", "h1", "h2", "h3", "h4", "h5", "h6"}:
@@ -68,6 +74,12 @@ def _append_node(doc: Document, node) -> None:
         return
 
     if name == "img":
+        return
+
+    child_tags = [child for child in node.children if isinstance(child, Tag)]
+    if child_tags:
+        for child in node.children:
+            _append_node(doc, child)
         return
 
     if node.get_text(strip=True):

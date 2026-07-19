@@ -1,0 +1,134 @@
+// Cross-cutting design system application (visual only)
+
+// Sidebar shell — base layout only (details in _sidebar.sass)
+.sidebar
+  background: $bg-sidebar
+  border-right: 1px solid $border
+  border-bottom: none
+  padding: $space-2
+  gap: $space-2
+
+// Side panels
+.conditions-panel,
+.rules-panel
+  background: $bg-panel
+  border-right: 1px solid $border
+  transition: none !important
+
+  &[aria-hidden="false"]
+    animation: none !important
+
+.conditions-panel
+  &[aria-hidden="false"]
+    padding: $space-2
+    width: 280px
+
+.conditions-panel-title,
+.rules-block-title
+  @include section-title
+
+.condition-card
+  padding: $space-2
+  border: 1px solid $border
+  border-radius: $radius-md
+  background: $bg-input
+  box-shadow: none
+
+.condition-card-label
+  @include caption
+  text-transform: uppercase
+  letter-spacing: 0.04em
+
+.condition-card-title
+  font: var(--weight-medium) var(--text-body)/var(--leading-normal) $font
+  color: $text
+
+.condition-card-options:not(.condition-card-options--multi)
+  // Styled in _polish.sass (segment control)
+  display: flex
+
+  .condition-option-pill
+    // base reset in polish layer
+    border: none
+
+// Editor chrome
+.editor-toolbar
+  background: $bg-panel
+  border-bottom: 1px solid $border
+
+.content:has(.preview-panel.is-edit) .editor-toolbar
+  display: none !important
+
+.ribbon-btn
+  border-radius: $radius-sm
+
+  &:hover
+    background: $bg-hover
+
+  &.is-active
+    background: $accent-subtle
+    color: $accent
+
+// Preview — visual focus
+.preview-panel
+  background: $bg
+
+.preview-panel:not(.is-edit) .markdown-body
+  background: $bg
+
+.preview-panel.is-editable .docx-canvas
+  padding: $space-4 $space-3 $space-4
+
+.preview-panel.is-editable .docx-document.docx-editable:not(.docx-structure-mode)
+  border-radius: $radius-sm
+  border: 1px solid $border-strong
+  box-shadow: var(--shadow-md)
+
+.preview-panel.is-edit .docx-document.docx-structure-mode
+  cursor: default
+  caret-color: transparent
+  border-radius: $radius-sm
+
+  &:focus
+    border-color: $border-strong
+    box-shadow: var(--shadow-sm)
+
+// Status bar
+.statusbar
+  height: var(--statusbar-height)
+  padding: 0 $space-2
+  background: $bg-panel
+  border-top: 1px solid $border
+  font: var(--weight-regular) var(--text-caption)/var(--statusbar-height) $font
+  color: $text-secondary
+
+.status-indicator
+  width: $space-1
+  height: $space-1
+  border-radius: $radius-sm
+  background: $accent
+
+  &.is-error
+    background: $danger
+
+// Dialogs + loading
+.dialog
+  border-radius: $radius-md
+  box-shadow: var(--shadow-md)
+
+.loading-job
+  border-radius: $radius-md
+  background: $bg-panel
+  border: 1px solid $border
+  box-shadow: var(--shadow-md)
+
+.loading-job-bar
+  background: $accent
+
+// Rules panel resizer
+.rules-panel-resizer::before
+  background: $border
+
+.rules-panel-resizer:hover::before,
+.rules-panel-resizer.is-dragging::before
+  background: $accent

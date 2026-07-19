@@ -1,10 +1,10 @@
-// Content area
+// Main workspace toolbar + tabs
 .content
   flex: 1
   display: flex
   flex-direction: column
   overflow: hidden
-  background: $surface-muted
+  background: $bg
   min-height: 0
   grid-column: 1
   grid-row: 3
@@ -15,94 +15,85 @@
 
 .content-toolbar
   display: flex
-  align-items: center
+  align-items: stretch
   justify-content: space-between
-  gap: 12px
-  background: $surface
+  gap: $space-2
+  background: $bg-panel
+  border-bottom: 1px solid $border
   flex-shrink: 0
   min-height: $workspace-chrome-h
+  padding: 0 $space-2
 
 .content-toolbar-left
   display: flex
   align-items: center
-  gap: 12px
-  color: $text-muted
-  font-size: 12px
+  gap: $space-1
   min-width: 0
   flex: 1
+  align-self: stretch
 
 .content-toolbar-actions
   display: flex
   align-items: center
-  gap: 10px
+  gap: $space-1
   flex-shrink: 0
+  align-self: center
 
 .toolbar-group
   display: inline-flex
   align-items: center
-  gap: 6px
+  gap: $space-1
 
 .toolbar-sep
   width: 1px
-  height: 20px
+  height: $space-3
   background: $border
   flex-shrink: 0
+  margin: 0 $space-1
 
 .toolbar-group[hidden],
 .toolbar-sep[hidden]
   display: none !important
 
 .preview-panel.is-approved .docx-canvas
-  box-shadow: inset 0 0 0 2px rgba(26, 127, 55, .35)
+  box-shadow: inset 0 0 0 1px rgba(76, 175, 80, 0.45)
 
 .preview-panel.is-approval-pending .docx-canvas
-  box-shadow: inset 0 0 0 2px rgba(9, 105, 218, .35)
-
-.preview-panel.is-approval-pending .docx-canvas
-  box-shadow: inset 0 0 0 2px rgba(9, 105, 218, .35)
-
-.content-filename
-  font-family: $font-mono
-  font-size: 12px
-  color: $text
-  overflow: hidden
-  text-overflow: ellipsis
-  white-space: nowrap
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16)
 
 .tab-nav
-  display: flex
+  display: inline-flex
+  align-self: flex-end
+  margin-bottom: -1px
   gap: 0
-  border: 1px solid $border
-  border-radius: $radius
-  overflow: hidden
 
 .tab-nav-item
-  padding: 5px 12px
-  font: 500 12px/20px $font
-  color: $text-muted
-  background: $surface
+  display: inline-flex
+  align-items: center
+  height: $workspace-chrome-h
+  padding: 0 $space-2
+  margin-bottom: -1px
   border: none
-  border-right: 1px solid $border
+  border-bottom: 2px solid transparent
+  border-radius: 0
+  background: transparent
+  color: $text-secondary
+  font: var(--weight-medium) var(--text-caption)/var(--leading-tight) $font
   cursor: pointer
-  position: relative
+  @include transition-interactive
 
   @media (prefers-reduced-motion: no-preference)
-    transition: color .18s ease, background .18s ease, box-shadow .18s ease
-
-  &:last-child
-    border-right: none
+    transition-duration: var(--duration-tab)
 
   &:hover:not(:disabled)
     color: $text
-    background: $surface-muted
+    background: color-mix(in srgb, $bg-hover 50%, transparent)
 
   &.is-active
     color: $text
-    background: $surface-muted
-    box-shadow: inset 0 -2px 0 $accent
+    font-weight: var(--weight-semibold)
+    border-bottom-color: $accent
 
   &:disabled
-    opacity: .5
+    opacity: 0.45
     cursor: not-allowed
-
-// Editor formatting toolbar (GitHub style)

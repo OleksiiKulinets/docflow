@@ -1,108 +1,183 @@
-// Theme tokens (CSS variables)
-:root
-  --bg: #ffffff
-  --bg-soft: #f8f9fb
-  --surface: #ffffff
-  --surface-muted: #f6f8fa
-  --surface-subtle: #eef1f5
-  --border: #d0d7de
-  --border-muted: #d8dee4
-  --text: #1f2328
-  --text-muted: #656d76
-  --text-subtle: #636c76
-  --accent: #0969da
-  --accent-emphasis: #0550ae
-  --accent-subtle: #ddf4ff
-  --success: #1a7f37
-  --success-emphasis: #116329
-  --success-subtle: #dafbe1
-  --danger: #cf222e
-  --danger-emphasis: #a40e26
-  --danger-subtle: #ffebe9
-  --doc-paper: #ffffff
-  --doc-text: #1f2328
-  --btn-active: #e9ecef
-  --shadow-soft: rgba(31, 35, 40, .08)
-  --shadow-medium: rgba(31, 35, 40, .12)
-  --shadow-strong: rgba(31, 35, 40, .18)
-  --overlay-dim: rgba(15, 17, 21, 0)
-  --overlay-bright: rgba(255, 255, 255, 0)
-  --header-mark-bg: #1f2328
-  --header-mark-fg: #ffffff
-  --scrollbar: #d8dee4
+// DocFlow Design System — tokens (8px grid, dark-first)
 
-html[data-theme="dark"]
-  --bg: #0d1117
-  --bg-soft: #010409
-  --surface: #161b22
-  --surface-muted: #0d1117
-  --surface-subtle: #21262d
-  --border: #30363d
-  --border-muted: #3d444d
-  --text: #e6edf3
-  --text-muted: #8b949e
-  --text-subtle: #6e7681
-  --accent: #58a6ff
-  --accent-emphasis: #79c0ff
-  --accent-subtle: rgba(56, 139, 253, .15)
-  --success: #3fb950
-  --success-emphasis: #56d364
-  --success-subtle: rgba(63, 185, 80, .15)
-  --danger: #f85149
-  --danger-emphasis: #ff7b72
-  --danger-subtle: rgba(248, 81, 73, .15)
-  --doc-paper: #1c2128
-  --doc-text: #e6edf3
-  --btn-active: #30363d
-  --shadow-soft: rgba(0, 0, 0, .35)
-  --shadow-medium: rgba(0, 0, 0, .45)
-  --shadow-strong: rgba(0, 0, 0, .55)
-  --overlay-dim: rgba(0, 0, 0, .42)
-  --overlay-bright: rgba(255, 255, 255, .28)
-  --header-mark-bg: #e6edf3
-  --header-mark-fg: #0d1117
-  --scrollbar: #484f58
+:root
+  // Spacing (8px system)
+  --space-1: 8px
+  --space-2: 16px
+  --space-3: 24px
+  --space-4: 32px
+
+  // Border radius
+  --radius-sm: 8px
+  --radius-md: 10px
+  --radius-lg: 12px
+
+  // Motion
+  --duration: 150ms
+  --duration-tab: 170ms
+  --ease: ease
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1)
+
+  // Branch semantics (yes/no rules)
+  --branch-yes: #3FB950
+  --branch-no: #F85149
+  --branch-yes-subtle: rgba(63, 185, 80, 0.14)
+  --branch-no-subtle: rgba(248, 81, 73, 0.14)
+
+  // Typography
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace
+  --text-page: 16px
+  --text-section: 13px
+  --text-body: 14px
+  --text-caption: 12px
+  --leading-tight: 1.25
+  --leading-normal: 1.5
+  --weight-regular: 400
+  --weight-medium: 500
+  --weight-semibold: 600
+
+  // Layout
+  --sidebar-width: 280px
+  --toolbar-height: 48px
+  --control-height: 32px
+  --statusbar-height: 32px
+
+  // Elevation
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28)
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.32)
+
+  // Semantic colors — dark (default)
+  --bg: #0F1115
+  --bg-sidebar: #15181E
+  --bg-panel: #1A1E25
+  --bg-hover: #22262F
+  --bg-active: #282D38
+  --bg-input: #12151A
+
+  --border: rgba(255, 255, 255, 0.08)
+  --border-strong: rgba(255, 255, 255, 0.12)
+  --border-focus: rgba(76, 175, 80, 0.55)
+
+  --text: #E6E8EB
+  --text-secondary: #9CA3AF
+  --text-tertiary: #6B7280
+
+  --accent: #4CAF50
+  --accent-hover: #43A047
+  --accent-pressed: #388E3C
+  --accent-subtle: rgba(76, 175, 80, 0.12)
+
+  --danger: #EF4444
+  --danger-hover: #DC2626
+  --danger-subtle: rgba(239, 68, 68, 0.12)
+
+  --doc-paper: #FFFFFF
+  --doc-text: #1A1E25
+
+  // Legacy aliases (components keep working)
+  --bg-soft: var(--bg-sidebar)
+  --surface: var(--bg-panel)
+  --surface-muted: var(--bg)
+  --surface-subtle: var(--bg-hover)
+  --border-muted: var(--border-strong)
+  --text-muted: var(--text-secondary)
+  --text-subtle: var(--text-tertiary)
+  --success: var(--accent)
+  --success-emphasis: var(--accent-hover)
+  --success-subtle: var(--accent-subtle)
+  --danger-emphasis: var(--danger-hover)
+  --accent-emphasis: var(--accent-hover)
+  --btn-active: var(--bg-active)
+  --shadow-soft: var(--shadow-sm)
+  --shadow-medium: var(--shadow-md)
+  --shadow-strong: rgba(0, 0, 0, 0.48)
+  --overlay-dim: rgba(0, 0, 0, 0.55)
+  --header-mark-bg: var(--accent)
+  --header-mark-fg: #FFFFFF
+  --scrollbar: rgba(255, 255, 255, 0.14)
+
+html[data-theme="light"]
+  --bg: #F4F5F7
+  --bg-sidebar: #FFFFFF
+  --bg-panel: #FFFFFF
+  --bg-hover: #ECEEF2
+  --bg-active: #E2E5EA
+  --bg-input: #FFFFFF
+  --border: rgba(0, 0, 0, 0.08)
+  --border-strong: rgba(0, 0, 0, 0.12)
+  --text: #111318
+  --text-secondary: #5C6370
+  --text-tertiary: #8B919A
+  --doc-paper: #FFFFFF
+  --doc-text: #111318
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06)
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08)
+  --header-mark-bg: #111318
+  --header-mark-fg: #FFFFFF
+  --scrollbar: rgba(0, 0, 0, 0.18)
 
 html
   height: 100%
   overflow: hidden
-  color-scheme: light
-
-html[data-theme="dark"]
   color-scheme: dark
 
+html[data-theme="light"]
+  color-scheme: light
+
+// SASS aliases
+$space-1: var(--space-1)
+$space-2: var(--space-2)
+$space-3: var(--space-3)
+$space-4: var(--space-4)
+
+$radius-sm: var(--radius-sm)
+$radius-md: var(--radius-md)
+$radius-lg: var(--radius-lg)
+$radius: var(--radius-sm)
+
+$duration: var(--duration)
+$ease: var(--ease)
+
 $bg: var(--bg)
+$bg-sidebar: var(--bg-sidebar)
+$bg-panel: var(--bg-panel)
+$bg-hover: var(--bg-hover)
+$bg-active: var(--bg-active)
+$bg-input: var(--bg-input)
 $bg-soft: var(--bg-soft)
+
 $surface: var(--surface)
 $surface-muted: var(--surface-muted)
 $surface-subtle: var(--surface-subtle)
+
 $border: var(--border)
 $border-muted: var(--border-muted)
+$border-strong: var(--border-strong)
+$border-focus: var(--border-focus)
 
 $text: var(--text)
 $text-muted: var(--text-muted)
 $text-subtle: var(--text-subtle)
+$text-secondary: var(--text-secondary)
+$text-tertiary: var(--text-tertiary)
 
 $accent: var(--accent)
 $accent-emphasis: var(--accent-emphasis)
+$accent-pressed: var(--accent-pressed)
 $accent-subtle: var(--accent-subtle)
-
 $success: var(--success)
 $success-emphasis: var(--success-emphasis)
 $success-subtle: var(--success-subtle)
-
 $danger: var(--danger)
 $danger-emphasis: var(--danger-emphasis)
+$danger-hover: var(--danger-hover)
 $danger-subtle: var(--danger-subtle)
 
 $doc-font: Calibri, 'Segoe UI', Arial, sans-serif
+$font: var(--font-sans)
+$font-mono: var(--font-mono)
 
-$sidebar-width: 300px
-$workspace-chrome-h: 48px
-
-$radius: 6px
-$radius-lg: 12px
-
-$font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'
-$font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace
-
+$sidebar-width: var(--sidebar-width)
+$workspace-chrome-h: var(--toolbar-height)
+$control-height: var(--control-height)

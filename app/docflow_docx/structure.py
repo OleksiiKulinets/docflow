@@ -893,7 +893,18 @@ def has_variant_rules(rules: dict | None) -> bool:
 
 
 def has_contract_variants(html: str) -> bool:
-    return bool(html and html.strip())
+    if not html or not html.strip():
+        return False
+
+    soup = BeautifulSoup(f"<div id='variant-root'>{html}</div>", "html.parser")
+    root = soup.find("div", id="variant-root")
+    if root is None:
+        return False
+
+    for block in _top_level_blocks(root):
+        if _is_section_intro(block) or _is_variant_header(block) or _is_conditional_include(block):
+            return True
+    return False
 
 
 def load_or_detect_rules(html: str, stored: dict | None) -> dict:
@@ -1309,44 +1320,28 @@ def make_structure_editable(html: str, extra_class: str = "") -> str:
     return f'<div class="docx-canvas">{inner}</div>'
 
 
-def merge_edited_into_source(source_html: str, edited_html: str) -> str:
-    if not source_html:
-        return annotate_blocks(edited_html)
-    if not edited_html:
-        return source_html
+def collect_top_level_block_ids(html: str) -> set[str]:
+    if not html or not html.strip():
+        return set()
 
-    source_soup = BeautifulSoup(f"<div id='src-root'>{source_html}</div>", "html.parser")
-    edited_soup = BeautifulSoup(f"<div id='edit-root'>{edited_html}</div>", "html.parser")
-    src_root = source_soup.find("div", id="src-root")
-    edit_root = edited_soup.find("div", id="edit-root")
-    if src_root is None or edit_root is None:
-        return annotate_blocks(edited_html or source_html)
+    soup = BeautifulSoup(f"<div id='block-root'>{html}</div>", "html.parser")
+    root = soup.find("div", id="block-root")
+    if root is None:
+        return set()
 
-    edited_map: dict[str, Tag] = {}
-    for block in _top_level_blocks(edit_root):
-        block_id = block.get("data-block-id")
-        if block_id:
-            edited_map[block_id] = block
-
-    if not edited_map:
-        return annotate_blocks(edited_html)
-
-    known_ids = set()
-    for block in _top_level_blocks(src_root):
-        block_id = block.get("data-block-id")
-        if not block_id or block_id not in edited_map:
-            continue
-        block.replace_with(edited_map[block_id].extract())
-        known_ids.add(block_id)
-
-    for block_id, block in edited_map.items():
-        if block_id not in known_ids and block.parent is edit_root:
-            src_root.append(block.extract())
-
-    return annotate_blocks(src_root.decode_contents())
+    return {
+        block_id
+        for block in _top_level_blocks(root)
+        if (block_id := block.get("data-block-id"))
+    }
 
 
-def merge_edited_into_source(source_html: str, edited_html: str) -> str:
+def merge_edited_into_source(
+    source_html: str,
+    edited_html: str,
+    *,
+    deletable_block_ids: set[str] | None = None,
+) -> str:
     """Apply preview edits (by data-block-id) into the full source document."""
     if not source_html:
         return annotate_blocks(edited_html)
@@ -1381,6 +1376,23 @@ def merge_edited_into_source(source_html: str, edited_html: str) -> str:
         if block_id not in known_ids and block.parent is edit_root:
             src_root.append(block.extract())
 
+    edited_ids = set(edited_map)
+    if deletable_block_ids is not None:
+        remove_ids = deletable_block_ids - edited_ids
+    elif not has_contract_variants(source_html):
+        remove_ids = {
+            block.get("data-block-id")
+            for block in _top_level_blocks(src_root)
+            if block.get("data-block-id") and block.get("data-block-id") not in edited_ids
+        }
+    else:
+        remove_ids = set()
+
+    for block in list(_top_level_blocks(src_root)):
+        block_id = block.get("data-block-id")
+        if block_id and block_id in remove_ids:
+            block.decompose()
+
     return annotate_blocks(src_root.decode_contents())
 
 
@@ -1397,11 +1409,6 @@ def _is_variant_header(block: Tag) -> bool:
 def _is_conditional_include(block: Tag) -> bool:
     if _is_section_intro(block) or _is_variant_header(block):
         return False
-    text = _normalize_text(block.get_text(" ", strip=True))
-    return bool(_CONDITIONAL_INCLUDE_RE.search(text))
-
-
-def _is_conditional_include(block: Tag) -> bool:
     text = _normalize_text(block.get_text(" ", strip=True))
     return bool(_CONDITIONAL_INCLUDE_RE.search(text))
 

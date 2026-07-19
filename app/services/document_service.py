@@ -23,6 +23,7 @@ from docflow_docx.structure import (
     apply_preview_overlay,
     apply_variant_rules,
     get_highlight_map,
+    collect_top_level_block_ids,
     get_active_condition_ids,
     has_configured_rules,
     has_contract_variants,
@@ -139,7 +140,9 @@ def build_edit_view_from_html(path: Path, html_content: str) -> tuple[str, dict]
     clean_html = annotate_blocks(
         strip_preview_decorations(prepare_edit_html(html_content))
     )
-    source_html = _session_source_html(ctx["source_html"], clean_html, ctx["settings"])
+    source_html = _session_source_html(
+        ctx["source_html"], clean_html, ctx["settings"], rules=ctx["rules"]
+    )
     session_ctx = {**ctx, "source_html": source_html}
     return _build_edit_view_from_source(session_ctx)
 
@@ -149,7 +152,9 @@ def build_preview_from_html(path: Path, html_content: str) -> tuple[str, dict]:
     clean_html = annotate_blocks(
         strip_preview_decorations(prepare_edit_html(html_content))
     )
-    source_html = _session_source_html(ctx["source_html"], clean_html, ctx["settings"])
+    source_html = _session_source_html(
+        ctx["source_html"], clean_html, ctx["settings"], rules=ctx["rules"]
+    )
     session_ctx = {**ctx, "source_html": source_html}
     display_html = _resolve_display_html(session_ctx)
     save_edit_html(
@@ -167,7 +172,9 @@ def sync_document_source(path: Path, html_content: str) -> tuple[str, str, dict]
     clean_html = annotate_blocks(
         strip_preview_decorations(prepare_edit_html(html_content))
     )
-    source_html = _session_source_html(ctx["source_html"], clean_html, ctx["settings"])
+    source_html = _session_source_html(
+        ctx["source_html"], clean_html, ctx["settings"], rules=ctx["rules"]
+    )
     session_ctx = {**ctx, "source_html": source_html}
 
     preview_html = _build_preview_display_html(
@@ -197,11 +204,23 @@ def _session_source_html(
     stored_source: str,
     clean_html: str,
     settings: dict,
+    *,
+    rules: dict | None = None,
 ) -> str:
     if not clean_html:
         return annotate_blocks(stored_source or "")
     if stored_source:
-        return annotate_blocks(merge_edited_into_source(stored_source, clean_html))
+        deletable_block_ids = None
+        if rules is not None:
+            preview_html = _build_preview_display_html(stored_source, rules, settings)
+            deletable_block_ids = collect_top_level_block_ids(preview_html)
+        return annotate_blocks(
+            merge_edited_into_source(
+                stored_source,
+                clean_html,
+                deletable_block_ids=deletable_block_ids,
+            )
+        )
     return annotate_blocks(clean_html)
 
 
@@ -556,17 +575,24 @@ def save_docx_content(path: Path, html_content: str) -> dict:
     settings = load_document_settings(path)
     stored_rules = load_variant_rules(path)
     existing_source = load_source_html(path) or ""
+    rules = load_or_detect_rules(existing_source or clean_html, stored_rules)
 
-    if settings.get("is_bank_employee") is not None and existing_source:
-        merged = merge_edited_into_source(existing_source, clean_html)
+    if existing_source:
+        deletable_block_ids = collect_top_level_block_ids(
+            _build_preview_display_html(existing_source, rules, settings)
+        )
+        merged = merge_edited_into_source(
+            existing_source,
+            clean_html,
+            deletable_block_ids=deletable_block_ids,
+        )
         source_html = annotate_blocks(merged)
     else:
         source_html = clean_html
 
-    rules = load_or_detect_rules(source_html, stored_rules)
     display_html = _resolve_preview_html(source_html, rules, settings)
 
-    write_docx_from_html(path, clean_html)
+    write_docx_from_html(path, display_html)
     save_edit_html(
         path,
         display_html,
@@ -574,6 +600,8 @@ def save_docx_content(path: Path, html_content: str) -> dict:
         settings=settings,
         variant_rules=rules,
     )
+    save_variant_rules(path, rules)
+    save_draft_source_html(path, source_html)
 
     return {
         **settings,
@@ -641,6 +669,17 @@ def _build_preview_display_html(source_html: str, rules: dict, settings: dict) -
 
 def _resolve_preview_html(source_html: str, rules: dict, settings: dict) -> str:
     return _build_preview_display_html(source_html, rules, settings)
+
+
+def refresh_docx_for_export(path: Path) -> None:
+    """Перегенерує DOCX на диску з HTML, який бачить користувач у перегляді."""
+    ctx = _load_docx_context(path)
+    export_html = _build_preview_display_html(
+        ctx["source_html"],
+        ctx["rules"],
+        ctx["settings"],
+    )
+    write_docx_from_html(path, export_html)
 
 
 def _text_to_preview_html(text: str) -> str:

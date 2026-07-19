@@ -1,11 +1,11 @@
-// Sidebar
+// Sidebar — file library
 .sidebar
-  background: $surface
+  background: $bg-sidebar
   border-bottom: 1px solid $border
-  padding: 16px
+  padding: $space-2
   display: flex
   flex-direction: column
-  gap: 20px
+  gap: $space-2
   overflow: hidden
   min-height: 0
   grid-column: 1
@@ -20,28 +20,30 @@
 .sidebar-section
   display: flex
   flex-direction: column
-  gap: 12px
+  gap: $space-1
   min-height: 0
 
 .sidebar-section.sidebar-files
   flex: 1
+  gap: $space-2
 
 .sidebar-section-head
   display: flex
   align-items: center
   justify-content: space-between
-  gap: 8px
-  padding-bottom: 8px
-  border-bottom: 1px solid $border
+  gap: $space-1
+  padding: 0 2px
+  border-bottom: none
 
 .sidebar-title
-  font-size: 13px
-  font-weight: 600
-  color: $text
+  @include section-title
+  font-size: var(--text-caption)
+  color: $text-secondary
+  text-transform: uppercase
+  letter-spacing: 0.04em
 
 .sidebar-title--mobile
-  padding-bottom: 8px
-  border-bottom: 1px solid $border
+  padding-bottom: $space-1
 
   @media (min-width: 769px)
     display: none
@@ -51,126 +53,133 @@
     display: none
 
 .sidebar-section > .sidebar-title:not(.sidebar-title--mobile)
-  padding-bottom: 8px
-  border-bottom: 1px solid $border
+  padding-bottom: $space-1
 
 .sidebar-section-head .sidebar-title
   padding-bottom: 0
-  border-bottom: none
 
 .sidebar-badge
-  font-size: 11px
-  font-weight: 600
-  color: $text-muted
-  background: $surface-muted
-  border: 1px solid $border
-  border-radius: 999px
-  padding: 1px 8px
+  @include caption
+  min-width: 20px
+  height: 20px
+  padding: 0 6px
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  border-radius: $radius-sm
+  background: $bg-active
+  border: none
+  color: $text-tertiary
+  font-weight: var(--weight-medium)
 
 .sidebar-search
   position: relative
   display: flex
   align-items: center
-  gap: 8px
-  padding: 0 10px
-  height: 34px
-  background: $bg-soft
+  gap: $space-1
+  padding: 0 $space-2
+  height: $control-height
+  background: $bg-input
   border: 1px solid $border
-  border-radius: $radius
-  transition: border-color .15s ease, box-shadow .15s ease
+  border-radius: $radius-sm
+  @include transition-interactive
 
   &:focus-within
-    border-color: $accent
-    box-shadow: 0 0 0 3px $accent-subtle
+    @include focus-ring
 
 .sidebar-search-icon
   flex-shrink: 0
-  opacity: .55
-  color: $text-muted
+  color: $text-tertiary
 
 .sidebar-search-input
   flex: 1
   min-width: 0
   border: none
   background: transparent
-  font: inherit
-  font-size: 13px
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
   color: $text
   outline: none
 
   &::placeholder
-    color: $text-subtle
+    color: $text-tertiary
 
   &::-webkit-search-cancel-button
     display: none
 
 .sidebar-search-clear
-  display: flex
-  align-items: center
-  justify-content: center
-  width: 22px
-  height: 22px
-  border: none
-  border-radius: 999px
-  background: transparent
-  color: $text-muted
-  cursor: pointer
-  flex-shrink: 0
-
-  &:hover
-    background: $surface-subtle
-    color: $text
+  @include btn-ghost
+  width: 24px
+  min-width: 24px
+  height: 24px
+  padding: 0
 
 .sidebar-empty
-  font-size: 12px
-  color: $text-muted
+  @include caption
   text-align: center
-  padding: 16px 8px
-  background: $bg-soft
+  padding: $space-3 $space-2
   border: 1px dashed $border
-  border-radius: $radius
+  border-radius: $radius-sm
+  background: transparent
+  color: $text-tertiary
 
 .sidebar-file-list
   display: flex
   flex-direction: column
-  gap: 6px
+  gap: 2px
   flex: 1
   min-height: 0
   overflow-y: auto
+  padding: 2px 0
 
 .sidebar-file-item
   display: flex
   align-items: stretch
-  gap: 4px
-  border: 1px solid $border
-  border-radius: $radius
-  background: $surface
-  overflow: hidden
+  gap: 0
+  border: none
+  border-radius: $radius-sm
+  background: transparent
+  position: relative
+  @include transition-interactive
 
-  @media (prefers-reduced-motion: no-preference)
-    animation: ui-fade-in .22s ease both
-    animation-delay: calc(var(--item-index, 1) * 24ms)
+  &::before
+    content: ""
+    position: absolute
+    left: 0
+    top: 6px
+    bottom: 6px
+    width: 2px
+    border-radius: 2px
+    background: transparent
+    @include transition-interactive
 
   &:hover
-    border-color: $border-muted
-    box-shadow: 0 1px 4px var(--shadow-soft)
+    background: $bg-hover
+
+    .sidebar-file-delete
+      opacity: 1
 
   &.is-active
-    border-color: rgba(9, 105, 218, .45)
-    background: $accent-subtle
-    box-shadow: 0 0 0 1px rgba(9, 105, 218, .15)
+    background: $bg-active
+
+    &::before
+      background: $accent
+
+    .sidebar-file-name
+      color: $text
+      font-weight: var(--weight-semibold)
 
 .sidebar-file-open
   flex: 1
   display: flex
   align-items: center
-  gap: 10px
+  gap: $space-2
   min-width: 0
-  padding: 10px 12px
+  padding: 7px $space-2 7px 10px
   border: none
   background: transparent
   text-align: left
   cursor: pointer
+  color: inherit
 
 .sidebar-file-icon
   flex-shrink: 0
@@ -179,33 +188,24 @@
   display: inline-flex
   align-items: center
   justify-content: center
-  min-width: 38px
-  height: 22px
+  min-width: 34px
+  height: 20px
   padding: 0 6px
-  border-radius: 4px
-  font: 700 9px/1 $font-mono
-  letter-spacing: .04em
+  border-radius: calc(#{$radius-sm} - 2px)
+  font: var(--weight-semibold) 10px/1 $font-mono
+  letter-spacing: 0.03em
   text-transform: uppercase
+  background: $bg-panel
+  border: 1px solid $border
+  color: $text-tertiary
 
-  &--docx
-    color: #0550ae
-    background: $accent-subtle
-    border: 1px solid rgba(9, 105, 218, .25)
-
-  &--pdf
-    color: #a40e26
-    background: $danger-subtle
-    border: 1px solid rgba(207, 34, 46, .25)
-
-  &--txt
-    color: $text-muted
-    background: $surface-muted
-    border: 1px solid $border
-
+  &--docx,
+  &--pdf,
+  &--txt,
   &--file
-    color: $text-muted
-    background: $surface-muted
-    border: 1px solid $border
+    background: $bg-panel
+    border-color: $border
+    color: $text-secondary
 
 .sidebar-file-info
   display: flex
@@ -214,32 +214,35 @@
   min-width: 0
 
 .sidebar-file-name
-  font-size: 13px
-  font-weight: 600
-  color: $text
+  font: var(--weight-medium) var(--text-caption)/var(--leading-tight) $font
+  color: $text-secondary
   overflow: hidden
   text-overflow: ellipsis
   white-space: nowrap
 
 .sidebar-file-meta
+  @include caption
   font-size: 11px
-  color: $text-muted
+  color: $text-tertiary
 
 .sidebar-file-delete
-  display: flex
-  align-items: center
-  justify-content: center
-  width: 40px
-  border: none
-  border-left: 1px solid $border
-  background: transparent
-  color: $text-muted
-  cursor: pointer
-  flex-shrink: 0
+  @include btn-ghost
+  align-self: center
+  width: 28px
+  min-width: 28px
+  height: 28px
+  margin-right: 4px
+  padding: 0
+  opacity: 0
+  color: $text-tertiary
+  @include transition-interactive
 
   &:hover
-    background: $danger-subtle
     color: $danger
+    background: $danger-subtle
+
+  .sidebar-file-item.is-active &
+    opacity: 1
 
 .sidebar-settings
   margin-top: 4px
@@ -1209,7 +1212,9 @@ body.is-resizing-rules-panel
 
 .rules-rule-card.is-collapsed .rules-collapse-btn,
 .rules-subpoint.is-collapsed .rules-collapse-btn,
-.rules-entry.is-collapsed .rules-collapse-btn,
+.rules-entry.is-collapsed .rules-collapse-btn
+  transform: rotate(-90deg)
+
 .rules-rule-hint
   margin: 0 0 8px
   font-size: 12px

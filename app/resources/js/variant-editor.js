@@ -12,6 +12,7 @@ const VariantEditor = (() => {
   let selectedEntryId = null;
   let pendingAdd = null;
   let collapsedRules = new Set();
+  let collapsedEntries = new Set();
   let expandedContentIds = new Set();
   let documentClicksBound = false;
   let editorEventsBound = false;
@@ -357,19 +358,31 @@ const VariantEditor = (() => {
 
   function renderWhenPills(entryId, currentWhen, condition) {
     if (!condition) return "";
+    const options = getConditionOptions(condition);
     return `
-      <div class="rules-when-pills rules-when-pills--inline" role="radiogroup">
-        ${getConditionOptions(condition)
-          .map(
-            (opt) => `
-          <label class="rules-when-pill">
-            <input type="radio" name="when-${entryId}" value="${escapeHtml(opt.value)}"
-              data-entry-when="${entryId}" ${currentWhen === String(opt.value) ? "checked" : ""}>
-            <span>${escapeHtml(opt.label)}</span>
-          </label>`,
-          )
+      <div class="segment-control segment-control--branch rules-when-pills" role="radiogroup" aria-label="Значення умови">
+        ${options
+          .map((opt, index) => {
+            const value = String(opt.value);
+            const branchClass =
+              value === "true" || (index === 0 && options.length <= 2)
+                ? "segment-option--yes"
+                : "segment-option--no";
+            return `
+          <label class="segment-option ${branchClass} rules-when-pill">
+            <input type="radio" name="when-${entryId}" value="${escapeHtml(value)}"
+              data-entry-when="${entryId}" ${currentWhen === value ? "checked" : ""}>
+            <span class="segment-option-label">${escapeHtml(opt.label)}</span>
+          </label>`;
+          })
           .join("")}
       </div>`;
+  }
+
+  function renderTreeCollapseButton(entryId, isCollapsed, label = "Згорнути") {
+    return `
+      <button type="button" class="rules-tree-collapse-btn" data-toggle-entry="${entryId}"
+        aria-expanded="${!isCollapsed}" aria-label="${escapeHtml(label)}">${CHEVRON}</button>`;
   }
 
   function renderContentPreview(entry, emptyText) {
@@ -392,9 +405,9 @@ const VariantEditor = (() => {
       </button>`;
   }
 
-  function renderMarkerForkSlot(entry, branch) {
+  function renderMarkerForkSlot(entry, branch, activeForkId = null) {
     if (!entry) return "";
-    const isSelected = selectedEntryId === entry.id;
+    const isSelected = selectedEntryId === entry.id || activeForkId === entry.id;
     const contentCount = (entry.content_block_ids || []).length;
     const label = branch === "yes" ? "Так" : "Ні";
 
@@ -404,38 +417,47 @@ const VariantEditor = (() => {
         <div class="rules-fork-head">
           <button type="button" class="rules-fork-select" data-select-entry="${entry.id}">
             <span class="rules-fork-badge rules-fork-badge--${branch}">${label}</span>
-            <span class="rules-fork-title">Наповнення для «${escapeHtml(label)}»</span>
+            <span class="rules-fork-title">${contentCount ? `${contentCount} абз.` : "Оберіть і позначте текст"}</span>
           </button>
-          <span class="rules-tree-meta">${contentCount ? `${contentCount} абз.` : "порожньо"}</span>
           ${
             isSelected && contentCount
               ? `<button type="button" class="btn btn-sm btn-ghost" data-clear-entry="${entry.id}">Очистити</button>`
               : ""
           }
         </div>
-        ${renderContentPreview(entry, "Оберіть цей варіант і клікніть абзаци в документі")}
+        ${renderContentPreview(entry, "Клікніть абзаци в документі для цієї гілки")}
       </li>`;
   }
 
   function renderMarkerNode(entry, condition) {
     const isSelected = selectedEntryId === entry.id;
+    const isCollapsed = collapsedEntries.has(entry.id);
     const { yes, no } = ensureMarkerFork(entry);
+    const activeForkId =
+      selectedEntryId === yes?.id || selectedEntryId === no?.id
+        ? selectedEntryId
+        : isSelected
+          ? yes?.id
+          : null;
 
     return `
-      <li class="rules-tree-node rules-tree-node--marker ${isSelected ? "is-selected" : ""}" data-entry-id="${entry.id}">
+      <li class="rules-tree-node rules-tree-node--marker ${isSelected ? "is-selected" : ""} ${isCollapsed ? "is-collapsed" : ""}" data-entry-id="${entry.id}">
         <div class="rules-tree-row rules-tree-row--main">
+          ${renderTreeCollapseButton(entry.id, isCollapsed, "Згорнути маркер")}
           <button type="button" class="rules-tree-select" data-select-entry="${entry.id}">
             <span class="rules-tree-kind">Маркер</span>
             <span class="rules-tree-label">${escapeHtml(truncate(entry.label, 64))}</span>
           </button>
-          <span class="rules-tree-meta">Так / Ні</span>
+          <span class="rules-tree-meta">2 гілки</span>
           <button type="button" class="rules-icon-btn" data-scroll-block="${entry.header_block_id}" title="Показати в документі">↗</button>
           <button type="button" class="rules-icon-btn rules-icon-btn--danger" data-delete-entry="${entry.id}" title="Видалити">${ICON_TRASH}</button>
         </div>
-        <ul class="rules-fork-list rules-fork-list--nested">
-          ${renderMarkerForkSlot(yes, "yes")}
-          ${renderMarkerForkSlot(no, "no")}
-        </ul>
+        <div class="rules-tree-node-body">
+          <ul class="rules-fork-list rules-fork-list--nested">
+            ${renderMarkerForkSlot(yes, "yes", activeForkId)}
+            ${renderMarkerForkSlot(no, "no", activeForkId)}
+          </ul>
+        </div>
       </li>`;
   }
 
@@ -444,26 +466,22 @@ const VariantEditor = (() => {
     const contentCount = (entry.content_block_ids || []).length;
     const currentWhen = whenToValue(entry.when, condition);
     const whenReady = currentWhen !== "";
-    const whenLabel = getWhenLabel(entry, condition);
 
     return `
       <li class="rules-tree-node rules-tree-node--variant ${isSelected ? "is-selected" : ""} ${whenReady && contentCount ? "is-ready" : "is-incomplete"}"
         data-entry-id="${entry.id}">
         <div class="rules-tree-row rules-tree-row--main">
+          <span class="rules-tree-indent" aria-hidden="true"></span>
           <button type="button" class="rules-tree-select" data-select-entry="${entry.id}">
             <span class="rules-tree-kind">Варіант</span>
             <span class="rules-tree-label">${escapeHtml(truncate(entry.label, 52))}</span>
           </button>
-          ${
-            whenReady
-              ? `<span class="rules-tree-when-badge rules-tree-when-badge--${currentWhen === "true" ? "yes" : "no"}">${escapeHtml(whenLabel)}</span>`
-              : `<span class="rules-tree-when-badge rules-tree-when-badge--empty">не обрано</span>`
-          }
           <span class="rules-tree-meta">${contentCount ? `${contentCount} абз.` : "без тексту"}</span>
           <button type="button" class="rules-icon-btn" data-scroll-block="${entry.header_block_id}" title="Показати в документі">↗</button>
           <button type="button" class="rules-icon-btn rules-icon-btn--danger" data-delete-entry="${entry.id}" title="Видалити">${ICON_TRASH}</button>
         </div>
         <div class="rules-tree-row rules-tree-row--when">
+          <span class="rules-tree-when-label">Якщо</span>
           ${renderWhenPills(entry.id, currentWhen, condition)}
           ${isSelected && contentCount ? `<button type="button" class="btn btn-sm btn-ghost" data-clear-entry="${entry.id}">Очистити</button>` : ""}
         </div>
@@ -473,11 +491,13 @@ const VariantEditor = (() => {
 
   function renderGroupNode(entry, condition) {
     const isSelected = selectedEntryId === entry.id;
+    const isCollapsed = collapsedEntries.has(entry.id);
     const children = getChildren(entry.id).filter(isVariant);
 
     return `
-      <li class="rules-tree-node rules-tree-node--group ${isSelected ? "is-selected" : ""}" data-entry-id="${entry.id}">
-        <div class="rules-tree-row">
+      <li class="rules-tree-node rules-tree-node--group ${isSelected ? "is-selected" : ""} ${isCollapsed ? "is-collapsed" : ""}" data-entry-id="${entry.id}">
+        <div class="rules-tree-row rules-tree-row--main">
+          ${renderTreeCollapseButton(entry.id, isCollapsed, "Згорнути групу")}
           <button type="button" class="rules-tree-select" data-select-entry="${entry.id}">
             <span class="rules-tree-kind">Група</span>
             <span class="rules-tree-label">${escapeHtml(truncate(entry.label, 64))}</span>
@@ -486,11 +506,13 @@ const VariantEditor = (() => {
           <button type="button" class="rules-icon-btn" data-scroll-block="${entry.header_block_id}" title="Показати в документі">↗</button>
           <button type="button" class="rules-icon-btn rules-icon-btn--danger" data-delete-entry="${entry.id}" title="Видалити">${ICON_TRASH}</button>
         </div>
-        ${
-          children.length
-            ? `<ul class="rules-tree-children">${children.map((child) => renderGroupVariantNode(child, condition)).join("")}</ul>`
-            : '<p class="rules-tree-empty-child">Оберіть групу і натисніть «+ Варіант».</p>'
-        }
+        <div class="rules-tree-node-body">
+          ${
+            children.length
+              ? `<ul class="rules-tree-children">${children.map((child) => renderGroupVariantNode(child, condition)).join("")}</ul>`
+              : '<p class="rules-tree-empty-child">Оберіть групу і натисніть «+ Варіант».</p>'
+          }
+        </div>
       </li>`;
   }
 
@@ -909,6 +931,16 @@ const VariantEditor = (() => {
         return;
       }
 
+      const toggleEntry = event.target.closest("[data-toggle-entry]");
+      if (toggleEntry) {
+        event.stopPropagation();
+        const id = toggleEntry.dataset.toggleEntry;
+        if (collapsedEntries.has(id)) collapsedEntries.delete(id);
+        else collapsedEntries.add(id);
+        renderAll();
+        return;
+      }
+
       const toggleContent = event.target.closest("[data-toggle-content]");
       if (toggleContent) {
         event.stopPropagation();
@@ -1119,6 +1151,7 @@ const VariantEditor = (() => {
       selectedEntryId = null;
       pendingAdd = null;
       collapsedRules = new Set();
+      collapsedEntries = new Set();
       expandedContentIds = new Set();
       for (const rule of rules.rules || []) {
         cleanupLegacyRuleEntries(rule);

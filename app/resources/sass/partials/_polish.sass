@@ -1,0 +1,448 @@
+// Release polish — visual consistency, tab transitions, segment controls, rules tree
+
+// ─── Shared segment control (Preview conditions + Rules when pills) ───
+.segment-control
+  @include segment-control-shell
+
+.segment-option
+  @include segment-option-base
+
+.segment-control--branch
+  .segment-option--yes input:checked + .segment-option-label,
+  .segment-option--yes input:checked + span:not(.segment-option-label)
+    background: var(--branch-yes-subtle)
+    color: var(--branch-yes)
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--branch-yes) 35%, transparent)
+
+  .segment-option--no input:checked + .segment-option-label,
+  .segment-option--no input:checked + span:not(.segment-option-label)
+    background: var(--branch-no-subtle)
+    color: var(--branch-no)
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--branch-no) 35%, transparent)
+
+// Preview conditions panel — unified toggle
+.conditions-panel
+  .condition-card
+    gap: $space-2
+    padding: $space-2
+    border-radius: $radius-md
+    background: $bg-panel
+
+  .condition-card-options:not(.condition-card-options--multi)
+    @include segment-control-shell
+    display: flex
+    grid-template-columns: unset
+    gap: 3px
+
+    .condition-option
+      @include segment-option-base
+      flex: 1
+
+    .condition-option-pill
+      all: unset
+      display: flex
+      align-items: center
+      justify-content: center
+      min-height: calc(#{$control-height} - 6px)
+      padding: 0 $space-1
+      border-radius: calc(#{$radius-sm} - 2px)
+      font: var(--weight-medium) var(--text-caption)/var(--leading-tight) $font
+      color: $text-secondary
+      @include transition-interactive
+
+    .condition-option:hover .condition-option-pill
+      color: $text
+      background: $bg-hover
+
+    .condition-option:nth-child(1) input:checked + .condition-option-pill
+      background: var(--branch-no-subtle)
+      color: var(--branch-no)
+      font-weight: var(--weight-semibold)
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--branch-no) 35%, transparent)
+
+    .condition-option:nth-child(2) input:checked + .condition-option-pill
+      background: var(--branch-yes-subtle)
+      color: var(--branch-yes)
+      font-weight: var(--weight-semibold)
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--branch-yes) 35%, transparent)
+
+  .condition-card-options--multi
+    @include segment-control-shell
+    display: flex
+    flex-wrap: wrap
+    grid-template-columns: unset
+    gap: 3px
+
+    .condition-option
+      @include segment-option-base
+      flex: 1 1 calc(50% - 3px)
+      min-width: 72px
+
+    .condition-option-pill
+      all: unset
+      display: flex
+      align-items: center
+      justify-content: center
+      min-height: calc(#{$control-height} - 6px)
+      padding: 0 $space-1
+      border-radius: calc(#{$radius-sm} - 2px)
+      font: var(--weight-medium) var(--text-caption)/var(--leading-tight) $font
+      color: $text-secondary
+      @include transition-interactive
+
+    .condition-option:hover .condition-option-pill
+      color: $text
+      background: $bg-hover
+
+    .condition-option input:checked + .condition-option-pill
+      background: $bg-active
+      color: $text
+      font-weight: var(--weight-semibold)
+      box-shadow: var(--shadow-sm)
+
+// ─── Tab navigation ───
+.tab-nav-item
+  position: relative
+  @include transition-interactive
+  transition-property: color, border-color, opacity
+
+  @media (prefers-reduced-motion: no-preference)
+    transition-duration: var(--duration-tab)
+
+  &.is-active
+    border-bottom-width: 2px
+
+  &:focus-visible
+    outline: none
+    box-shadow: inset 0 -2px 0 $accent, 0 0 0 2px $accent-subtle
+
+// ─── Workspace tab transition (Preview ↔ Rules) ───
+.preview-panel
+  @media (prefers-reduced-motion: no-preference)
+    .conditions-panel,
+    .rules-panel,
+    .markdown-body
+      transition: opacity var(--duration-tab) var(--ease-standard), transform var(--duration-tab) var(--ease-standard)
+
+    .rules-panel
+      transition-property: opacity, transform, width
+
+  &.is-tab-transitioning
+    .markdown-body,
+    .conditions-panel,
+    .rules-panel
+      will-change: opacity, transform
+
+    &:not(.is-edit) .markdown-body
+      animation: tab-view-in var(--duration-tab) var(--ease-standard) both
+
+    &.is-edit .rules-panel[aria-hidden="false"]
+      animation: tab-view-in var(--duration-tab) var(--ease-standard) both
+
+@media (prefers-reduced-motion: no-preference)
+  @keyframes tab-view-in
+    from
+      opacity: 0
+      transform: translateY(4px)
+    to
+      opacity: 1
+      transform: translateY(0)
+
+// Faster rules panel resize — less layout jump
+.rules-panel
+  @media (prefers-reduced-motion: no-preference)
+    transition: opacity var(--duration-tab) var(--ease-standard), width var(--duration-tab) var(--ease-standard)
+
+    &[aria-hidden="false"]:not(.is-resizing)
+      transition: width var(--duration-tab) var(--ease-standard), opacity var(--duration-tab) var(--ease-standard)
+
+// ─── Rules tree hierarchy ───
+.rules-tree-collapse-btn
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  flex-shrink: 0
+  width: 24px
+  height: 24px
+  padding: 0
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: $bg-panel
+  color: $text-secondary
+  cursor: pointer
+  @include transition-interactive
+
+  svg
+    display: block
+    transition: transform var(--duration-tab) var(--ease-standard)
+
+  &:hover
+    background: $bg-hover
+    color: $text
+    border-color: $border-strong
+
+  &:focus-visible
+    @include focus-ring
+
+.rules-tree-node.is-collapsed > .rules-tree-row .rules-tree-collapse-btn svg,
+.rules-tree-node.is-collapsed > .rules-tree-row--main .rules-tree-collapse-btn svg
+  transform: rotate(-90deg)
+
+.rules-tree-node.is-collapsed > .rules-tree-children,
+.rules-tree-node.is-collapsed > .rules-fork-list,
+.rules-tree-node.is-collapsed > .rules-tree-node-body
+  display: none
+
+.rules-tree-root
+  gap: $space-2
+
+.rules-tree-children
+  margin: $space-1 0 0 $space-3
+  padding-left: $space-2
+  border-left: 2px solid color-mix(in srgb, $border 70%, $accent 30%)
+  gap: $space-1
+
+.rules-tree-row
+  gap: $space-1
+  padding: $space-1 $space-2
+  border-radius: $radius-sm
+  @include transition-interactive
+
+  &:hover
+    border-color: $border-strong
+    background: color-mix(in srgb, $bg-hover 80%, transparent)
+
+.rules-tree-node.is-selected > .rules-tree-row,
+.rules-tree-node.is-selected > .rules-tree-row--main
+  border-color: color-mix(in srgb, $accent 45%, $border)
+  background: $accent-subtle
+  box-shadow: inset 3px 0 0 $accent
+
+.rules-tree-row--when
+  display: flex
+  align-items: center
+  flex-wrap: wrap
+  gap: $space-1
+  margin-top: $space-1
+  padding: $space-1 $space-2 $space-1 calc(#{$space-3} + #{$space-2})
+  border: 1px dashed $border
+  border-radius: $radius-sm
+  background: color-mix(in srgb, $bg-input 70%, transparent)
+
+  .segment-control
+    flex: 1
+    min-width: 140px
+    max-width: 240px
+
+.rules-tree-when-label
+  flex-shrink: 0
+  font: var(--weight-semibold) var(--text-caption)/var(--leading-tight) $font
+  color: $text-tertiary
+  text-transform: uppercase
+  letter-spacing: 0.04em
+  min-width: 36px
+
+.rules-tree-indent
+  flex-shrink: 0
+  width: 24px
+  flex-shrink: 0
+  font: var(--weight-semibold) var(--text-caption)/var(--leading-tight) $font
+  color: $text-tertiary
+  text-transform: uppercase
+  letter-spacing: 0.04em
+  min-width: 36px
+
+.rules-tree-indent
+  flex-shrink: 0
+  width: 24px
+
+// When pills in rules — use segment control
+.rules-when-pills.segment-control,
+.rules-when-pills
+  &.segment-control
+    max-width: 100%
+
+  .rules-when-pill
+    @include segment-option-base
+
+  .rules-when-pill span,
+  .segment-option-label
+    width: 100%
+
+// Marker fork branches
+.rules-fork-list--nested
+  margin: $space-1 0 0 calc(#{$space-3} + 2px)
+  padding-left: $space-2
+  border-left: 2px solid $border
+  gap: $space-1
+
+.rules-fork-slot
+  border-radius: $radius-sm
+  @include transition-interactive
+
+  &--yes
+    border-left: 3px solid transparent
+
+    &.is-selected,
+    &.is-ready.is-selected
+      border-left-color: var(--branch-yes)
+      background: color-mix(in srgb, var(--branch-yes-subtle) 60%, $bg-panel)
+
+  &--no
+    border-left: 3px solid transparent
+
+    &.is-selected,
+    &.is-ready.is-selected
+      border-left-color: var(--branch-no)
+      background: color-mix(in srgb, var(--branch-no-subtle) 60%, $bg-panel)
+
+.rules-fork-head
+  padding: $space-1 $space-2
+
+.rules-fork-badge
+  min-width: 36px
+  border-radius: $radius-sm
+  font-size: var(--text-caption)
+  font-weight: var(--weight-semibold)
+
+  &--yes
+    background: var(--branch-yes-subtle)
+    color: var(--branch-yes)
+
+  &--no
+    background: var(--branch-no-subtle)
+    color: var(--branch-no)
+
+.rules-tree-when-badge
+  border-radius: $radius-sm
+  font-size: 10px
+  font-weight: var(--weight-semibold)
+  letter-spacing: 0.02em
+
+  &--yes
+    background: var(--branch-yes-subtle)
+    color: var(--branch-yes)
+
+  &--no
+    background: var(--branch-no-subtle)
+    color: var(--branch-no)
+
+// Rule cards
+.rules-rule-card
+  padding: $space-2
+  border-radius: $radius-md
+  gap: 0
+
+  &.is-configured
+    border-color: color-mix(in srgb, $accent 25%, $border)
+
+.rules-rule-head
+  margin-bottom: $space-2
+  gap: $space-1
+
+.rules-collapse-btn
+  width: 24px
+  height: 24px
+  border-radius: $radius-sm
+
+.rules-rule-card.is-collapsed .rules-collapse-btn svg
+  transform: rotate(-90deg)
+
+.rules-mode-banner
+  border-radius: $radius-sm
+  padding: $space-1 $space-2
+  margin-bottom: $space-2
+  width: 100%
+  font-size: var(--text-caption)
+
+// Rules panel chrome
+.rules-panel-head
+  padding: $space-2
+  min-height: $control-height
+
+.rules-panel-scroll
+  padding: $space-2
+
+.rules-block
+  padding: $space-2
+  border-radius: $radius-md
+  gap: $space-2
+
+.rules-block-head
+  padding-bottom: $space-2
+  gap: $space-2
+
+.rules-condition-picker select
+  @include control-shell
+  height: $control-height
+  padding: 0 $space-2
+  font-size: var(--text-caption)
+
+  &:focus
+    @include focus-ring
+
+.rules-icon-btn
+  width: $control-height
+  height: $control-height
+  border-radius: $radius-sm
+  @include transition-interactive
+
+  &:focus-visible
+    @include focus-ring
+
+  &--danger:hover
+    background: $danger-subtle
+    color: $danger
+    border-color: color-mix(in srgb, $danger 35%, $border)
+
+// Toolbar + buttons consistency
+.content-toolbar
+  min-height: $workspace-chrome-h
+
+.content-toolbar-actions .btn
+  min-width: 0
+
+.btn:focus-visible
+  @include focus-ring
+
+// Conditions setup hint
+.conditions-setup-hint
+  margin-bottom: $space-2
+  border-radius: $radius-sm
+
+// Ribbon active state — align with accent (not legacy blue)
+.ribbon-btn.is-active
+  background: $accent-subtle
+  border-color: color-mix(in srgb, $accent 35%, $border)
+  color: $accent
+
+// Accent buttons in rules panel
+.btn-accent
+  color: $accent
+  border-color: color-mix(in srgb, $accent 35%, $border)
+  background: $accent-subtle
+
+  &:hover:not(:disabled)
+    color: $accent
+    background: color-mix(in srgb, $accent 18%, $bg-hover)
+    border-color: color-mix(in srgb, $accent 45%, $border)
+
+// Toolbar polish
+.content-toolbar-left .tab-nav
+  margin-left: 0
+
+// Status bar polish
+.statusbar
+  gap: $space-2
+
+.statusbar-item
+  font-size: var(--text-caption)
+  color: $text-tertiary
+
+// Dialog consistency
+.dialog-actions .btn
+  min-width: 88px
+
+// Prevent double animation on rules panel open
+.rules-panel[aria-hidden="false"]
+  animation: none !important
