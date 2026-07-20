@@ -1,0 +1,259 @@
+// Structure tree — strict IDE layout (VS Code / JetBrains)
+// Row: [indent][expander][icon][label] — fill — [meta][actions]
+
+$tree-row-h: 36px
+$tree-indent-step: 20px
+$tree-pad-x: 12px
+$tree-expander-w: 16px
+$tree-icon-w: 16px
+$tree-gap: 8px
+$tree-meta-w: 128px
+$tree-action-w: 20px
+
+.tree-view
+  display: flex
+  flex-direction: column
+  flex: 1
+  min-height: 100%
+  background: transparent
+  overflow: hidden
+
+.tree-branch
+  display: block
+  position: relative
+  z-index: 1
+
+.tree-group
+  position: relative
+  display: block
+  z-index: 1
+
+  &::before
+    content: ""
+    position: absolute
+    left: calc(#{$tree-pad-x} + var(--parent-depth, 0) * #{$tree-indent-step} + #{$tree-expander-w * 0.5})
+    top: 0
+    bottom: calc(#{$tree-row-h} * 0.5)
+    width: 1px
+    background: var(--tree-guide)
+    pointer-events: none
+    z-index: 0
+
+.tree-row
+  display: flex
+  align-items: center
+  gap: $tree-gap
+  height: $tree-row-h
+  min-height: $tree-row-h
+  padding-inline: $tree-pad-x
+  border: none
+  background: transparent
+  cursor: pointer
+  user-select: none
+  position: relative
+  @include transition-interactive
+
+  .tree-group > .tree-branch > &
+    &::after
+      content: ""
+      position: absolute
+      left: calc(#{$tree-pad-x} + (var(--tree-depth, 0) - 1) * #{$tree-indent-step} + #{$tree-expander-w * 0.5})
+      top: calc(#{$tree-row-h} * 0.5)
+      width: $tree-indent-step
+      height: 1px
+      background: var(--tree-guide)
+      pointer-events: none
+      z-index: 0
+
+  &:hover
+    background: $bg-hover
+
+    .tree-action--drag
+      opacity: 1
+
+  &.is-selected
+    background: $bg-active
+    box-shadow: inset 2px 0 0 $accent
+
+  &.is-dragging
+    opacity: 0.5
+
+  &.is-drop-before::before,
+  &.is-drop-after::after
+    content: ""
+    position: absolute
+    left: calc(#{$tree-pad-x} + var(--tree-depth, 0) * #{$tree-indent-step})
+    right: $tree-pad-x
+    height: 2px
+    background: $accent
+    pointer-events: none
+
+  &.is-drop-before::before
+    top: 0
+
+  &.is-drop-after::after
+    bottom: 0
+
+  &.is-drop-inside
+    background: $bg-hover
+
+  &.is-drop-invalid
+    background: $danger-subtle
+
+.tree-row--root
+  background: color-mix(in srgb, $bg-hover 65%, transparent)
+
+  .tree-label
+    font-weight: var(--weight-semibold)
+
+  &:hover
+    background: $bg-hover
+
+  &.is-selected
+    background: $bg-active
+
+.tree-indent
+  flex: 0 0 calc(var(--tree-depth, 0) * #{$tree-indent-step})
+  width: calc(var(--tree-depth, 0) * #{$tree-indent-step})
+  min-width: 0
+  height: 1px
+
+.tree-expander
+  flex: 0 0 $tree-expander-w
+  width: $tree-expander-w
+  height: $tree-expander-w
+  padding: 0
+  border: none
+  border-radius: $radius-sm
+  background: transparent
+  color: $text-tertiary
+  cursor: pointer
+  display: inline-flex
+  align-items: center
+  justify-content: center
+
+  &:hover
+    color: $text
+    background: color-mix(in srgb, $bg-hover 80%, transparent)
+
+  &--empty
+    pointer-events: none
+    visibility: hidden
+
+.tree-expander-icon
+  display: block
+  transition: transform 150ms ease
+
+  &.is-collapsed
+    transform: rotate(-90deg)
+
+.tree-icon
+  flex: 0 0 $tree-icon-w
+  width: $tree-icon-w
+  height: $tree-icon-w
+  display: inline-flex
+  align-items: center
+  justify-content: center
+
+.tree-icon--section
+  &::before
+    content: ""
+    width: 12px
+    height: 10px
+    border: 1px solid $text-tertiary
+    border-radius: 2px
+    background: color-mix(in srgb, $text-tertiary 12%, transparent)
+
+.tree-icon--leaf
+  &::before
+    content: ""
+    width: 10px
+    height: 12px
+    border: 1px solid $text-tertiary
+    border-radius: 1px
+
+.tree-icon--status
+  &::before
+    content: ""
+    width: 8px
+    height: 8px
+    border-radius: 50%
+    background: $text-tertiary
+
+.tree-icon--yes::before
+  background: var(--branch-yes)
+
+.tree-icon--no::before
+  background: var(--branch-no)
+
+.tree-icon--choice::before
+  background: $text-secondary
+
+.tree-label
+  flex: 0 1 auto
+  min-width: 0
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+  font: var(--weight-regular) var(--text-body)/var(--leading-tight) $font
+  color: $text
+
+  .tree-row.is-selected &
+    font-weight: var(--weight-medium)
+
+.tree-fill
+  flex: 1 1 auto
+  min-width: $tree-gap
+
+.tree-meta
+  flex: 0 0 $tree-meta-w
+  width: $tree-meta-w
+  max-width: $tree-meta-w
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+  text-align: right
+  font: var(--weight-regular) var(--text-caption)/var(--leading-tight) $font
+  color: $text-tertiary
+
+.tree-meta:empty
+  display: none
+
+.tree-action--drag
+  flex: 0 0 $tree-action-w
+  width: $tree-action-w
+  height: $tree-action-w
+  padding: 0
+  border: none
+  background: transparent
+  opacity: 0
+  cursor: grab
+  touch-action: none
+  color: $text-tertiary
+
+  &::before
+    content: ""
+    display: block
+    width: 6px
+    height: 12px
+    margin: 0 auto
+    background-image: radial-gradient(circle, currentColor 1px, transparent 1.5px)
+    background-size: 6px 4px
+    background-repeat: repeat-y
+
+  &:active
+    cursor: grabbing
+
+.tree-empty
+  padding: 24px 16px
+  text-align: center
+
+.tree-empty-title
+  margin: 0 0 8px
+  font: var(--weight-semibold) var(--text-body)/var(--leading-tight) $font
+  color: $text
+
+.tree-empty-sub
+  margin: 0 0 16px
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+  color: $text-secondary

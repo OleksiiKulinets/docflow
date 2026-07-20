@@ -7,10 +7,10 @@
   --space-3: 24px
   --space-4: 32px
 
-  // Border radius
-  --radius-sm: 8px
-  --radius-md: 10px
-  --radius-lg: 12px
+  // Border radius — 6-8px max, no giant rounded corners
+  --radius-sm: 6px
+  --radius-md: 8px
+  --radius-lg: 8px
 
   // Motion
   --duration: 150ms
@@ -41,7 +41,14 @@
   --sidebar-width: 280px
   --toolbar-height: 48px
   --control-height: 32px
+  --tab-height: 28px
   --statusbar-height: 32px
+
+  // Tree lists (structure / rules)
+  --tree-row-height: 36px
+  --tree-indent: 20px
+  --tree-gap: 0px
+  --tree-guide: rgba(255, 255, 255, 0.1)
 
   // Elevation
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28)
@@ -55,8 +62,8 @@
   --bg-active: #282D38
   --bg-input: #12151A
 
-  --border: rgba(255, 255, 255, 0.08)
-  --border-strong: rgba(255, 255, 255, 0.12)
+  --border: rgba(240, 246, 252, 0.1)
+  --border-strong: rgba(240, 246, 252, 0.16)
   --border-focus: rgba(76, 175, 80, 0.55)
 
   --text: #E6E8EB
@@ -64,8 +71,8 @@
   --text-tertiary: #6B7280
 
   --accent: #4CAF50
-  --accent-hover: #43A047
-  --accent-pressed: #388E3C
+  --accent-hover: #5CB860
+  --accent-pressed: #43A047
   --accent-subtle: rgba(76, 175, 80, 0.12)
 
   --danger: #EF4444
@@ -100,6 +107,7 @@
 html[data-theme="light"]
   --bg: #F4F5F7
   --bg-sidebar: #FFFFFF
+  --tree-guide: rgba(0, 0, 0, 0.08)
   --bg-panel: #FFFFFF
   --bg-hover: #ECEEF2
   --bg-active: #E2E5EA
@@ -181,3 +189,6 @@ $font-mono: var(--font-mono)
 $sidebar-width: var(--sidebar-width)
 $workspace-chrome-h: var(--toolbar-height)
 $control-height: var(--control-height)
+$tree-row-height: var(--tree-row-height)
+$tree-indent: var(--tree-indent)
+$tree-gap: var(--tree-gap)

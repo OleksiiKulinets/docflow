@@ -17,43 +17,68 @@
   display: flex
   align-items: stretch
   justify-content: space-between
-  gap: $space-2
-  background: $bg-panel
+  flex-wrap: nowrap
+  gap: 8px
+  background: $bg-sidebar
   border-bottom: 1px solid $border
   flex-shrink: 0
-  min-height: $workspace-chrome-h
-  padding: 0 $space-2
+  height: var(--toolbar-height)
+  min-height: var(--toolbar-height)
+  max-height: var(--toolbar-height)
+  padding: 0 12px
+  overflow-x: auto
+  overflow-y: hidden
+  scrollbar-width: none
+
+  &::-webkit-scrollbar
+    display: none
+
+  &.workspace-chrome--main
+    padding: 0 12px
 
 .content-toolbar-left
   display: flex
-  align-items: center
-  gap: $space-1
+  align-items: stretch
+  gap: 4px
   min-width: 0
-  flex: 1
-  align-self: stretch
+  flex: 1 1 auto
+
+  .sidebar-toggle--expand
+    flex-shrink: 0
+    align-self: center
 
 .content-toolbar-actions
   display: flex
   align-items: center
-  gap: $space-1
-  flex-shrink: 0
+  flex-wrap: nowrap
+  justify-content: flex-end
+  gap: 8px
+  flex: 0 0 auto
   align-self: center
 
 .toolbar-group
   display: inline-flex
   align-items: center
-  gap: $space-1
+  gap: 8px
 
 .toolbar-sep
   width: 1px
-  height: $space-3
+  height: 24px
   background: $border
   flex-shrink: 0
-  margin: 0 $space-1
+  margin: 0 4px
 
 .toolbar-group[hidden],
 .toolbar-sep[hidden]
   display: none !important
+
+// Collapsed file sidebar — keep toolbar tabs aligned to bottom border
+.page.is-sidebar-collapsed
+  .content-toolbar
+    padding-left: 8px
+
+  .tab-nav-item
+    padding: 0 12px
 
 .preview-panel.is-approved .docx-canvas
   box-shadow: inset 0 0 0 1px rgba(76, 175, 80, 0.45)
@@ -61,39 +86,17 @@
 .preview-panel.is-approval-pending .docx-canvas
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16)
 
+// Document tabs (Перегляд / Правила)
 .tab-nav
-  display: inline-flex
-  align-self: flex-end
-  margin-bottom: -1px
+  display: flex
+  align-items: stretch
+  flex: 1 1 auto
+  min-width: 0
+  padding: 0
+  margin: 0
+  background: transparent
+  border-bottom: none
   gap: 0
 
 .tab-nav-item
-  display: inline-flex
-  align-items: center
-  height: $workspace-chrome-h
-  padding: 0 $space-2
-  margin-bottom: -1px
-  border: none
-  border-bottom: 2px solid transparent
-  border-radius: 0
-  background: transparent
-  color: $text-secondary
-  font: var(--weight-medium) var(--text-caption)/var(--leading-tight) $font
-  cursor: pointer
-  @include transition-interactive
-
-  @media (prefers-reduced-motion: no-preference)
-    transition-duration: var(--duration-tab)
-
-  &:hover:not(:disabled)
-    color: $text
-    background: color-mix(in srgb, $bg-hover 50%, transparent)
-
-  &.is-active
-    color: $text
-    font-weight: var(--weight-semibold)
-    border-bottom-color: $accent
-
-  &:disabled
-    opacity: 0.45
-    cursor: not-allowed
+  @include chrome-nav-tab

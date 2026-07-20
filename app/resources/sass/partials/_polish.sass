@@ -100,21 +100,13 @@
       font-weight: var(--weight-semibold)
       box-shadow: var(--shadow-sm)
 
-// ─── Tab navigation ───
-.tab-nav-item
-  position: relative
-  @include transition-interactive
-  transition-property: color, border-color, opacity
-
-  @media (prefers-reduced-motion: no-preference)
-    transition-duration: var(--duration-tab)
-
-  &.is-active
-    border-bottom-width: 2px
-
+// ─── Tab navigation — focus ring (underline from chrome-nav-tab mixin) ───
+.tab-nav-item,
+.rules-segment-nav-item
   &:focus-visible
     outline: none
-    box-shadow: inset 0 -2px 0 $accent, 0 0 0 2px $accent-subtle
+    z-index: 3
+    box-shadow: inset 0 0 0 2px $accent-subtle
 
 // ─── Workspace tab transition (Preview ↔ Rules) ───
 .preview-panel
@@ -194,27 +186,28 @@
   display: none
 
 .rules-tree-root
-  gap: $space-2
+  gap: $tree-gap
 
 .rules-tree-children
-  margin: $space-1 0 0 $space-3
+  margin: 0 0 0 $space-2
   padding-left: $space-2
-  border-left: 2px solid color-mix(in srgb, $border 70%, $accent 30%)
-  gap: $space-1
+  border-left: 1px solid var(--tree-guide)
+  gap: $tree-gap
 
 .rules-tree-row
-  gap: $space-1
+  gap: $space-2
+  min-height: $tree-row-height
   padding: $space-1 $space-2
   border-radius: $radius-sm
   @include transition-interactive
 
   &:hover
     border-color: $border-strong
-    background: color-mix(in srgb, $bg-hover 80%, transparent)
+    background: $bg-hover
 
 .rules-tree-node.is-selected > .rules-tree-row,
 .rules-tree-node.is-selected > .rules-tree-row--main
-  border-color: color-mix(in srgb, $accent 45%, $border)
+  border-color: color-mix(in srgb, $accent 40%, $border)
   background: $accent-subtle
   box-shadow: inset 3px 0 0 $accent
 
@@ -223,11 +216,11 @@
   align-items: center
   flex-wrap: wrap
   gap: $space-1
-  margin-top: $space-1
-  padding: $space-1 $space-2 $space-1 calc(#{$space-3} + #{$space-2})
+  margin-top: $tree-gap
+  padding: $space-1 $space-2 $space-1 calc(#{$space-2} + #{$space-2})
   border: 1px dashed $border
   border-radius: $radius-sm
-  background: color-mix(in srgb, $bg-input 70%, transparent)
+  background: $bg-input
 
   .segment-control
     flex: 1
@@ -356,12 +349,15 @@
   font-size: var(--text-caption)
 
 // Rules panel chrome
-.rules-panel-head
-  padding: $space-2
-  min-height: $control-height
+.rules-panel-chrome
+  .btn-primary
+    box-shadow: none
+
+  #save-rules-btn
+    min-width: 0
 
 .rules-panel-scroll
-  padding: $space-2
+  padding: 0
 
 .rules-block
   padding: $space-2
@@ -416,22 +412,15 @@
   border-color: color-mix(in srgb, $accent 35%, $border)
   color: $accent
 
-// Accent buttons in rules panel
+// Accent buttons — secondary style (no colored fill/border)
 .btn-accent
-  color: $accent
-  border-color: color-mix(in srgb, $accent 35%, $border)
-  background: $accent-subtle
+  @include btn-secondary
 
-  &:hover:not(:disabled)
-    color: $accent
-    background: color-mix(in srgb, $accent 18%, $bg-hover)
-    border-color: color-mix(in srgb, $accent 45%, $border)
-
-// Toolbar polish
+// Toolbar polish — tabs flush to chrome edge
 .content-toolbar-left .tab-nav
   margin-left: 0
+  padding-left: 0
 
-// Status bar polish
 .statusbar
   gap: $space-2
 

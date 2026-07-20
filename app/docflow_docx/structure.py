@@ -442,6 +442,9 @@ def normalize_rules(rules: dict | None) -> dict:
     if not rules:
         return _empty_rules()
 
+    if rules.get("schema_version") == 5:
+        return rules
+
     if rules.get("schema_version") != _SCHEMA_VERSION:
         rules = _migrate_legacy_rules(rules)
 
@@ -1134,6 +1137,223 @@ def strip_preview_decorations(html: str) -> str:
             element["class"] = filtered
         elif classes:
             del element["class"]
+
+    return root.decode_contents()
+
+
+def _v5_node_map(model: dict) -> dict[str, dict]:
+    return {
+        node["id"]: node
+        for node in model.get("nodes") or []
+        if node.get("id")
+    }
+
+
+def _v5_ordered_children(model: dict, node_id: str) -> list[dict]:
+    node = _v5_node_map(model).get(node_id)
+    if not node:
+        return []
+    id_map = _v5_node_map(model)
+    return [
+        id_map[child_id]
+        for child_id in (node.get("children_order") or [])
+        if child_id in id_map
+    ]
+
+
+def _v5_block_ids(node: dict | None) -> list[str]:
+    if not node:
+        return []
+    content = node.get("content") or {}
+    return list(content.get("block_ids") or [])
+
+
+def _v5_collect_field_ids(condition: dict | None) -> set[str]:
+    ids: set[str] = set()
+    if not condition:
+        return ids
+    if condition.get("type") == "predicate":
+        condition_id = condition.get("condition_id")
+        if condition_id:
+            ids.add(str(condition_id))
+        return ids
+    if condition.get("type") == "not":
+        ids.update(_v5_collect_field_ids(condition.get("item")))
+        return ids
+    for item in condition.get("items") or []:
+        ids.update(_v5_collect_field_ids(item))
+    return ids
+
+
+def _v5_active_field_ids(model: dict) -> list[str]:
+    ids: set[str] = set()
+    for node in model.get("nodes") or []:
+        ids.update(_v5_collect_field_ids(node.get("condition")))
+    return sorted(ids)
+
+
+def _v5_is_exclusive(node: dict) -> bool:
+    behavior = (node.get("properties") or {}).get("behavior") or {}
+    return node.get("type") == "section" and bool(behavior.get("exclusive"))
+
+
+def _v5_evaluate_condition(condition: dict | None, values: dict) -> bool:
+    if not condition:
+        return True
+    kind = condition.get("type")
+    if kind == "predicate":
+        condition_id = condition.get("condition_id")
+        if not condition_id or condition_id not in values or values[condition_id] is None:
+            return False
+        active = values[condition_id]
+        operator = condition.get("operator", "eq")
+        expected = condition.get("value")
+        if operator == "eq":
+            return active == expected
+        if operator == "neq":
+            return active != expected
+        return False
+    if kind == "not":
+        return not _v5_evaluate_condition(condition.get("item"), values)
+    if kind == "and":
+        items = condition.get("items") or []
+        return bool(items) and all(
+            _v5_evaluate_condition(item, values) for item in items
+        )
+    if kind == "or":
+        return any(_v5_evaluate_condition(item, values) for item in condition.get("items") or [])
+    return False
+
+
+def _v5_exclusive_field_ids(children: list[dict]) -> set[str]:
+    ids: set[str] = set()
+    for child in children:
+        ids.update(_v5_collect_field_ids(child.get("condition")))
+    return ids
+
+
+def _v5_collect_active_blocks(
+    model: dict,
+    values: dict,
+    *,
+    ignore_branch_predicates: bool = False,
+) -> set[str]:
+    active: set[str] = set()
+    roots = [
+        node
+        for node in model.get("nodes") or []
+        if not node.get("parent_id")
+    ]
+
+    def walk(node: dict, *, ignore_branch_predicates: bool = False) -> None:
+        if not ignore_branch_predicates and not _v5_evaluate_condition(node.get("condition"), values):
+            return
+        active.update(_v5_block_ids(node))
+        children = _v5_ordered_children(model, node["id"])
+        if _v5_is_exclusive(node) and children:
+            field_ids = _v5_exclusive_field_ids(children)
+            has_choice = bool(field_ids) and all(
+                values.get(field_id) is not None for field_id in field_ids
+            )
+            if not has_choice:
+                for child in children:
+                    walk(child, ignore_branch_predicates=True)
+                return
+            for child in children:
+                if _v5_evaluate_condition(child.get("condition"), values):
+                    walk(child)
+            return
+        for child in children:
+            walk(child, ignore_branch_predicates=ignore_branch_predicates)
+
+    for root in roots:
+        walk(root, ignore_branch_predicates=ignore_branch_predicates)
+    return active
+
+
+def _v5_all_blocks(model: dict) -> set[str]:
+    blocks: set[str] = set()
+    for node in model.get("nodes") or []:
+        blocks.update(_v5_block_ids(node))
+    return blocks
+
+
+def _v5_rules_ready(model: dict, values: dict) -> bool:
+    field_ids = _v5_active_field_ids(model)
+    if not field_ids:
+        return False
+    return all(values.get(field_id) is not None for field_id in field_ids)
+
+
+def _v5_has_explicit_choice(model: dict, values: dict) -> bool:
+    field_ids = _v5_active_field_ids(model)
+    return any(values.get(field_id) is not None for field_id in field_ids)
+
+
+def _v5_highlight_map(model: dict, values: dict) -> dict[str, str]:
+    if not _v5_has_explicit_choice(model, values):
+        return {}
+
+    active = _v5_collect_active_blocks(model, values)
+    all_blocks = _v5_all_blocks(model)
+    if not all_blocks:
+        return {}
+
+    highlights: dict[str, str] = {}
+    for block_id in all_blocks:
+        highlights[block_id] = (
+            "content-active" if block_id in active else "content-inactive"
+        )
+    return highlights
+
+
+def apply_document_model(
+    html: str,
+    model: dict,
+    *,
+    condition_values: dict | None = None,
+    finalize: bool = False,
+) -> str:
+    """Застосувати v5 document_model до HTML (перегляд або фіналізація)."""
+    if not html or not html.strip():
+        return html
+    if not model or model.get("schema_version") != 5:
+        return html
+
+    values = {
+        key: value
+        for key, value in (condition_values or {}).items()
+        if value is not None
+    }
+    html = annotate_blocks(html)
+    if not values and not finalize:
+        return html
+
+    active_blocks = _v5_collect_active_blocks(model, values)
+    highlights = _v5_highlight_map(model, values)
+    if highlights:
+        html = apply_highlights(html, highlights)
+
+    ready = _v5_rules_ready(model, values)
+    if not ready and not finalize:
+        return html
+
+    soup = BeautifulSoup(f"<div id='v5-apply-root'>{html}</div>", "html.parser")
+    root = soup.find("div", id="v5-apply-root")
+    if root is None:
+        return html
+
+    if finalize and ready:
+        remove_ids = _v5_all_blocks(model) - active_blocks
+        if remove_ids:
+            for block in _top_level_blocks(root):
+                block_id = block.get("data-block-id", "")
+                if block_id in remove_ids:
+                    block.decompose()
+        strip_red_content(root)
+    elif ready:
+        if not highlights:
+            mute_red_content(root)
 
     return root.decode_contents()
 

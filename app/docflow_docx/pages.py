@@ -1,5 +1,7 @@
 import json
+import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,13 +17,138 @@ def edit_json_path(file_path: Path) -> Path:
     return file_path.parent / f"{file_path.name}.edit.json"
 
 
+def _repair_document_model_fragment(remainder: str) -> dict[str, Any] | None:
+    remainder = remainder.lstrip()
+    if not remainder.startswith(('"label"', '"id"', '"type"')):
+        return None
+
+    field_id = "field-1"
+    match = re.search(r'"condition_id"\s*:\s*"([^"]+)"', remainder)
+    if match:
+        field_id = match.group(1)
+
+    prefix = f'{{"schema_version":5,"fields":[{{"id":"{field_id}",'
+    text = prefix + remainder
+    for candidate in (text, text.rstrip()[:-1] if text.rstrip().endswith("}") else text):
+        try:
+            model = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(model, dict) and model.get("schema_version") == 5:
+            return model
+    return None
+
+
+def _parse_edit_json(raw: str) -> dict[str, Any]:
+    raw = raw.lstrip("\ufeff").strip()
+    if not raw:
+        return {}
+
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError as exc:
+        if "Extra data" not in str(exc):
+            raise
+
+    decoder = json.JSONDecoder()
+    data, idx = decoder.raw_decode(raw)
+    if not isinstance(data, dict):
+        return {}
+
+    tail = raw[idx:].lstrip()
+    if not tail:
+        return data
+
+    model = data.get("document_model")
+    if not isinstance(model, dict):
+        model = {}
+    if model.get("fields") or model.get("nodes"):
+        return data
+
+    repaired = _repair_document_model_fragment(tail)
+    if not repaired:
+        return data
+
+    data["document_model"] = repaired
+    settings = data.get("settings")
+    if isinstance(settings, dict):
+        settings["document_model"] = repaired
+        settings.pop("variant_rules", None)
+        field_ids = [
+            str(field.get("id"))
+            for field in repaired.get("fields") or []
+            if field.get("id")
+        ]
+        if field_ids:
+            settings["active_condition_ids"] = sorted(set(field_ids))
+    return data
+
+
+def _normalize_edit_payload(data: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(data)
+    model = payload.get("document_model")
+    if isinstance(model, dict) and model.get("schema_version") == 5:
+        payload["document_model"] = model
+        payload.pop("variant_rules", None)
+        settings = payload.get("settings")
+        if isinstance(settings, dict):
+            settings = dict(settings)
+            settings["document_model"] = model
+            settings.pop("variant_rules", None)
+            payload["settings"] = settings
+    return payload
+
+
+def _write_edit_data(file_path: Path, data: dict[str, Any]) -> None:
+    path = edit_json_path(file_path)
+    payload = _normalize_edit_payload(data)
+    encoded = json.dumps(payload, ensure_ascii=False, indent=2)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    temp_path = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    temp_path.write_text(encoded, encoding="utf-8")
+    try:
+        for attempt in range(8):
+            try:
+                os.replace(temp_path, path)
+                return
+            except PermissionError:
+                if attempt == 7:
+                    break
+                time.sleep(0.05 * (attempt + 1))
+        path.write_text(encoded, encoding="utf-8")
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+
+
+def _raw_has_extra_json(raw: str) -> bool:
+    try:
+        json.loads(raw.lstrip("\ufeff").strip())
+        return False
+    except json.JSONDecodeError as exc:
+        return "Extra data" in str(exc)
+
+
 def load_edit_data(file_path: Path) -> dict[str, Any]:
     path = edit_json_path(file_path)
     if not path.exists():
         return {}
 
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return data if isinstance(data, dict) else {}
+    raw = path.read_text(encoding="utf-8")
+    data = _parse_edit_json(raw)
+    normalized = _normalize_edit_payload(data)
+    if normalized != data or _raw_has_extra_json(raw):
+        try:
+            _write_edit_data(file_path, normalized)
+        except OSError:
+            # Sidecar may be locked on Windows while the app reads it; keep in-memory data.
+            pass
+    return normalized
 
 
 def load_edit_html(file_path: Path) -> str | None:
@@ -42,13 +169,9 @@ def load_draft_source_html(file_path: Path) -> str | None:
 
 
 def save_draft_source_html(file_path: Path, html: str) -> None:
-    path = edit_json_path(file_path)
     data = load_edit_data(file_path)
     data["draft_source_html"] = html
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _write_edit_data(file_path, data)
 
 
 def load_source_html(file_path: Path) -> str | None:
@@ -72,13 +195,26 @@ def load_variant_rules(file_path: Path) -> dict[str, Any] | None:
 
 
 def save_variant_rules(file_path: Path, rules: dict[str, Any]) -> None:
-    path = edit_json_path(file_path)
     data = load_edit_data(file_path)
-    data["variant_rules"] = rules
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    if isinstance(rules, dict) and rules.get("schema_version") == 5:
+        data["document_model"] = rules
+        data.pop("variant_rules", None)
+    else:
+        data["variant_rules"] = rules
+    _write_edit_data(file_path, data)
+
+
+def load_document_model(file_path: Path) -> dict[str, Any] | None:
+    data = load_edit_data(file_path)
+    model = data.get("document_model")
+    return model if isinstance(model, dict) else None
+
+
+def save_document_model(file_path: Path, model: dict[str, Any]) -> None:
+    data = load_edit_data(file_path)
+    data["document_model"] = model
+    data.pop("variant_rules", None)
+    _write_edit_data(file_path, data)
 
 
 def save_edit_html(
@@ -89,7 +225,6 @@ def save_edit_html(
     settings: dict[str, Any] | None = None,
     variant_rules: dict[str, Any] | None = None,
 ) -> None:
-    path = edit_json_path(file_path)
     data = load_edit_data(file_path)
 
     data["html"] = html
@@ -100,26 +235,24 @@ def save_edit_html(
 
     if settings is not None:
         data["settings"] = settings
-    elif "settings" not in data:
-        data["settings"] = {}
 
     if variant_rules is not None:
-        data["variant_rules"] = variant_rules
+        if variant_rules.get("schema_version") == 5:
+            data["document_model"] = variant_rules
+            data.pop("variant_rules", None)
+        else:
+            data["variant_rules"] = variant_rules
 
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    if "settings" not in data:
+        data["settings"] = {}
+
+    _write_edit_data(file_path, data)
 
 
 def save_document_settings(file_path: Path, settings: dict[str, Any]) -> None:
-    path = edit_json_path(file_path)
     data = load_edit_data(file_path)
     data["settings"] = settings
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _write_edit_data(file_path, data)
 
 
 def strip_variant_wrappers(html: str) -> str:

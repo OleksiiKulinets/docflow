@@ -85,6 +85,67 @@
   font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
   color: $text-secondary
 
+// Subtle full-area grid (IDE panel background)
+@mixin ide-panel-grid($size: 24px)
+  $grid-line: color-mix(in srgb, var(--border) 38%, transparent)
+  background-color: $bg-sidebar
+  background-image: linear-gradient($grid-line 1px, transparent 1px), linear-gradient(90deg, $grid-line 1px, transparent 1px)
+  background-size: $size $size
+  background-position: 0 0
+
+// Active tab underline — flush with chrome bottom border, full tab width
+@mixin tab-active-underline($height: 2px)
+  box-shadow: none
+
+  &::after
+    content: ""
+    position: absolute
+    left: 0
+    right: 0
+    bottom: 0
+    height: $height
+    background: $accent
+    pointer-events: none
+    z-index: 1
+
+// Shared chrome tab (Перегляд/Правила, Структура/Умови)
+@mixin chrome-nav-tab
+  position: relative
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  align-self: stretch
+  flex: 0 0 auto
+  min-width: 0
+  margin: 0
+  padding: 0 16px
+  border: none
+  border-radius: 0
+  background: transparent
+  color: $text-secondary
+  font: var(--weight-medium) var(--text-body)/var(--leading-tight) $font
+  white-space: nowrap
+  cursor: pointer
+  z-index: 0
+  @include transition-interactive
+
+  @media (prefers-reduced-motion: no-preference)
+    transition-duration: var(--duration-tab)
+
+  &:hover:not(:disabled):not(.is-active)
+    color: $text
+    background: $bg-hover
+
+  &.is-active
+    color: $text
+    font-weight: var(--weight-semibold)
+    background: transparent
+    @include tab-active-underline
+
+  &:disabled
+    opacity: 0.45
+    cursor: not-allowed
+
 @mixin segment-control-shell
   display: flex
   align-items: stretch

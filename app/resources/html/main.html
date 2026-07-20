@@ -278,36 +278,66 @@
       </aside>
 
       <aside class="rules-panel" id="rules-panel" aria-hidden="true">
-        <div class="rules-panel-head">
-          <div class="rules-panel-toolbar">
-            <button class="btn btn-sm" id="redetect-rules-btn" type="button" title="Скинути всі правила">↻</button>
-            <button class="btn btn-primary btn-sm" id="save-rules-btn" type="button">Зберегти</button>
-          </div>
-        </div>
         <div class="rules-panel-scroll">
-          <div class="rules-editor" id="rules-editor">
-            <section class="rules-block rules-block--conditions">
-              <header class="rules-block-head">
-                <div class="rules-block-head-main">
-                  <h3 class="rules-block-title">Умови</h3>
-                  <p class="rules-block-sub">Питання так/ні або вибір для правил документа</p>
+          <div class="rules-editor node-editor-shell" id="rules-editor">
+            <header class="rules-panel-chrome">
+              <div class="rules-panel-chrome-start">
+                <button class="btn btn-sm btn-ghost rules-panel-back" id="rules-panel-back" type="button" hidden aria-label="Назад до структури" title="Назад до структури">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M10.22 3.22a.75.75 0 0 1 0 1.06L7.06 7.44H14.5a.75.75 0 0 1 0 1.5H7.06l3.16 3.16a.75.75 0 0 1-1.06 1.06l-4.5-4.5a.75.75 0 0 1 0-1.06l4.5-4.5a.75.75 0 0 1 1.06 0Z"/>
+                  </svg>
+                </button>
+                <nav class="rules-segment-nav" id="rules-subnav" aria-label="Навігація правил">
+                  <button type="button" class="rules-segment-nav-item is-active" data-rules-page="structure" role="tab" aria-selected="true">Структура</button>
+                  <button type="button" class="rules-segment-nav-item" data-rules-page="fields" role="tab" aria-selected="false">Умови</button>
+                </nav>
+                <div class="rules-panel-editor-label" id="rules-panel-editor-label" hidden>
+                  <span class="rules-panel-editor-type" id="rules-editor-page-type">Вузол</span>
+                  <span class="rules-panel-editor-title" id="rules-editor-page-title">—</span>
                 </div>
-                <button class="btn btn-sm btn-accent" id="add-condition-btn" type="button">+ Умова</button>
-              </header>
-              <div id="rules-conditions"></div>
-            </section>
+              </div>
+              <div class="rules-panel-chrome-actions">
+                <button class="btn btn-sm rules-chrome-btn" id="node-add-node-btn" type="button" data-rules-chrome-add="structure" title="Додати розділ">
+                  <span class="rules-chrome-btn-glyph" aria-hidden="true">+</span>
+                  <span class="rules-chrome-btn-text">Розділ</span>
+                </button>
+                <button class="btn btn-sm rules-chrome-btn" id="add-condition-btn" type="button" data-rules-chrome-add="fields" hidden title="Додати умову">
+                  <span class="rules-chrome-btn-glyph" aria-hidden="true">+</span>
+                  <span class="rules-chrome-btn-text">Умова</span>
+                </button>
+                <button class="btn btn-sm btn-ghost rules-panel-icon-btn" id="redetect-rules-btn" type="button" title="Скинути всі правила" aria-label="Скинути всі правила">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A6.987 6.987 0 0 1 15 8a.75.75 0 0 1-1.5 0A5.5 5.5 0 0 0 8 2.5ZM2.5 8a5.5 5.5 0 0 0 9.631 3.631l-1.204-1.204A.25.25 0 0 1 11.104 10h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A6.987 6.987 0 0 1 1 8a.75.75 0 0 1 1.5 0Z"/>
+                  </svg>
+                </button>
+                <button class="btn btn-sm btn-primary rules-chrome-btn rules-chrome-btn--primary" id="save-rules-btn" type="button">
+                  <span class="rules-chrome-btn-text">Зберегти</span>
+                </button>
+              </div>
+            </header>
 
-            <section class="rules-block rules-block--rules">
-              <header class="rules-block-head">
-                <div class="rules-block-head-main">
-                  <h3 class="rules-block-title">Правила</h3>
-                  <p class="rules-block-sub">Підпункт → варіанти → значення умови → текст</p>
+            <nav class="rules-editor-breadcrumb" id="rules-editor-breadcrumb" aria-label="Розташування у дереві" hidden></nav>
+
+            <div class="rules-page-viewport">
+              <section class="rules-page rules-page--structure is-active" data-rules-page="structure" aria-hidden="false">
+                <div class="rules-page-body rules-page-body--tree">
+                  <div class="tree-view" id="node-tree-host" role="tree" aria-label="Структура документа"></div>
                 </div>
-                <button class="btn btn-sm btn-accent" id="add-rule-btn" type="button">+ Правило</button>
-              </header>
-              <div id="rules-mode-banner"></div>
-              <div id="rules-tree"></div>
-            </section>
+              </section>
+
+              <section class="rules-page rules-page--fields" data-rules-page="fields" aria-hidden="true" hidden>
+                <div class="rules-page-body rules-page-body--list">
+                  <div id="node-fields-host" class="logic-fields-list"></div>
+                </div>
+              </section>
+
+              <section class="rules-page rules-page--editor" data-rules-page="editor" aria-hidden="true" hidden>
+                <div id="node-variants-host" class="rules-editor-context-strip" aria-label="Варіанти розділу"></div>
+                <div class="rules-page-body rules-page-body--editor">
+                  <div id="node-inspector-host"></div>
+                </div>
+              </section>
+            </div>
           </div>
         </div>
       </aside>
@@ -343,7 +373,11 @@
 <script src="../js/loading.js"></script>
 <script src="../js/theme.js"></script>
 <script src="../js/editor.js"></script>
-<script src="../js/variant-editor.js"></script>
+<script src="../js/node-model.js"></script>
+<script src="../js/templates.js"></script>
+<script src="../js/node-ui-uk.js"></script>
+<script src="../js/node-blocks.js"></script>
+<script src="../js/node-editor.js"></script>
 <script src="../js/main.js"></script>
 </body>
 </html>

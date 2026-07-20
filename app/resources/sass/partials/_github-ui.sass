@@ -1,0 +1,250 @@
+// Rules panel — single chrome row, flat tree, IDE-style (VS Code / GitHub)
+
+.rules-panel,
+.rules-panel-scroll,
+.node-editor-shell,
+.rules-page-viewport
+  background: $bg
+
+// ─── Rules panel navbar ───
+.rules-panel-chrome
+  flex-shrink: 0
+  display: flex
+  align-items: stretch
+  justify-content: space-between
+  flex-wrap: nowrap
+  gap: 8px
+  height: var(--toolbar-height)
+  min-height: var(--toolbar-height)
+  max-height: var(--toolbar-height)
+  padding: 0 12px
+  border-bottom: 1px solid $border
+  background: $bg-sidebar
+  overflow-x: auto
+  overflow-y: hidden
+  scrollbar-width: none
+
+  &::-webkit-scrollbar
+    display: none
+
+.rules-panel-chrome-start
+  display: flex
+  align-items: stretch
+  gap: 4px
+  min-width: 0
+  flex: 1 1 auto
+
+.rules-panel-chrome-actions
+  display: flex
+  align-items: stretch
+  flex-wrap: nowrap
+  justify-content: flex-end
+  gap: 8px
+  flex-shrink: 0
+  padding-left: 12px
+  margin-left: auto
+  border-left: 1px solid $border
+
+  .btn
+    height: $control-height
+    min-height: $control-height
+    align-self: center
+    flex: 0 0 auto
+
+  .btn[hidden]
+    display: none !important
+
+.rules-chrome-btn
+  gap: 4px
+  padding: 0 12px
+
+.rules-chrome-btn-glyph
+  font: var(--weight-semibold) var(--text-body)/1 $font
+
+.rules-chrome-btn-text
+  font: inherit
+
+.rules-chrome-btn--primary
+  min-width: 5.5rem
+  padding: 0 16px
+
+.rules-panel-back,
+.rules-panel-icon-btn
+  width: $control-height
+  min-width: $control-height
+  padding: 0
+  align-self: center
+  flex-shrink: 0
+
+.rules-panel-back[hidden],
+.rules-panel-editor-label[hidden]
+  display: none !important
+
+// Sub-nav tabs (Структура / Умови)
+.rules-segment-nav
+  display: flex
+  align-items: stretch
+  gap: 0
+  min-width: 0
+  flex: 1 1 auto
+
+  &[hidden]
+    display: none !important
+
+.rules-segment-nav-item
+  @include chrome-nav-tab
+
+// Editor mode label in chrome (replaces tabs)
+.rules-panel-editor-label
+  display: flex
+  align-items: center
+  gap: 8px
+  min-width: 0
+  overflow: hidden
+  align-self: center
+  padding: 0 8px
+
+.rules-panel-editor-type
+  flex-shrink: 0
+  font: var(--weight-regular) var(--text-caption)/var(--leading-tight) $font
+  color: $text-tertiary
+
+.rules-panel-editor-title
+  min-width: 0
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+  font: var(--weight-medium) var(--text-body)/var(--leading-tight) $font
+  color: $text
+
+// Page bodies — flush, no nested cards
+.rules-page-body
+  flex: 1
+  min-height: 0
+  overflow: auto
+  overscroll-behavior: contain
+
+.rules-page-body--tree
+  display: flex
+  flex-direction: column
+  padding: 0
+  @include ide-panel-grid(24px)
+
+.rules-page-body--list
+  padding: $space-2 $space-1
+  @include ide-panel-grid(24px)
+
+.rules-page-body--editor
+  padding: $space-2
+  background: $bg
+
+// Breadcrumb strip — between chrome and content
+.rules-editor-breadcrumb
+  flex-shrink: 0
+  display: flex
+  flex-direction: column
+  gap: 2px
+  min-height: 32px
+  padding: $space-1 $space-2
+  border-bottom: 1px solid $border
+  background: $bg-panel
+
+  &[hidden]
+    display: none !important
+
+  .node-inspector-location-path
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: 4px
+    font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+    color: $text-secondary
+
+  .node-inspector-active-condition
+    margin: 0
+    font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+    color: $text-tertiary
+
+// Editor sub-areas (variants, inspector)
+.rules-editor-context-strip
+  flex-shrink: 0
+  padding: $space-1 $space-2 0
+  background: $bg
+
+  &[hidden]
+    display: none !important
+
+.rules-editor-context-strip .rules-context-tabs
+  display: flex
+  align-items: center
+  gap: $space-1
+  min-height: $control-height
+
+.rules-editor-context-strip .rules-context-tab
+  height: calc(#{$control-height} - 4px)
+  padding: 0 $space-2
+  border: 1px solid transparent
+  border-radius: $radius-sm
+  background: transparent
+  color: $text-secondary
+  font: var(--weight-medium) var(--text-caption)/1 $font
+
+  &:hover
+    color: $text
+    background: $bg-hover
+
+  &.is-active
+    color: $text
+    font-weight: var(--weight-semibold)
+    background: $bg-active
+    border-color: $border
+
+// Inspector cards — minimal borders
+.node-inspector
+  max-width: 640px
+
+.node-inspector-card
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: $bg-sidebar
+
+.node-field,
+.node-input,
+.node-reparent-field select
+  max-width: 560px
+
+// Narrow rules panel — compact single row (never wrap — preserves tab underline)
+@container rules-panel (max-width: 420px)
+  .rules-panel-chrome
+    padding: 0 8px
+    gap: 4px
+
+  .rules-segment-nav-item
+    padding: 0 12px
+    font-size: var(--text-caption)
+
+  .rules-panel-chrome-actions
+    padding-left: 8px
+    gap: 4px
+
+  .rules-chrome-btn
+    padding: 0 8px
+
+  .rules-chrome-btn--primary
+    min-width: 0
+    padding: 0 12px
+
+@container rules-panel (max-width: 340px)
+  .rules-chrome-btn:not(.rules-chrome-btn--primary) .rules-chrome-btn-text
+    display: none
+
+  .rules-chrome-btn:not(.rules-chrome-btn--primary)
+    min-width: $control-height
+    padding: 0
+
+  .rules-panel-chrome-actions
+    border-left: none
+    padding-left: 4px
+
+  .rules-panel-editor-type
+    display: none

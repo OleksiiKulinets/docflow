@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from docflow_docx.pages import (
+    load_document_model,
     load_document_settings,
     load_edit_html,
     load_source_html,
@@ -12,6 +13,7 @@ from docflow_docx.pages import (
     make_editable,
     needs_numbering_refresh,
     prepare_edit_html,
+    save_document_model,
     save_edit_html,
     save_draft_source_html,
     save_variant_rules,
@@ -19,6 +21,7 @@ from docflow_docx.pages import (
 from docflow_docx.renderer import render_docx_html
 from docflow_docx.structure import (
     annotate_blocks,
+    apply_document_model,
     apply_highlights,
     apply_preview_overlay,
     apply_variant_rules,
@@ -40,6 +43,146 @@ from docflow_docx.structure import (
 from docflow_docx.writer import write_docx_from_html
 
 
+def _is_v5_model(rules: dict | None) -> bool:
+    return isinstance(rules, dict) and rules.get("schema_version") == 5
+
+
+def _empty_v5_model() -> dict:
+    return {"schema_version": 5, "fields": [], "nodes": [], "meta": {}}
+
+
+def _collect_v5_field_ids(condition) -> set[str]:
+    ids: set[str] = set()
+    if not condition:
+        return ids
+    if condition.get("type") == "predicate":
+        condition_id = condition.get("condition_id")
+        if condition_id:
+            ids.add(str(condition_id))
+        return ids
+    if condition.get("type") == "not":
+        ids.update(_collect_v5_field_ids(condition.get("item")))
+        return ids
+    for item in condition.get("items") or []:
+        ids.update(_collect_v5_field_ids(item))
+    return ids
+
+
+def _v5_active_field_ids(model: dict) -> list[str]:
+    ids: set[str] = set()
+    for node in model.get("nodes") or []:
+        ids.update(_collect_v5_field_ids(node.get("condition")))
+    return sorted(ids)
+
+
+def _v5_node_configured(model: dict, node: dict) -> bool:
+    behavior = (node.get("properties") or {}).get("behavior") or {}
+    if node.get("type") == "section" and behavior.get("exclusive"):
+        branches = [
+            child
+            for child in model.get("nodes") or []
+            if child.get("parent_id") == node.get("id")
+            and child.get("type") == "section"
+            and child.get("condition")
+        ]
+        if len(branches) >= 2:
+            return all(_v5_node_configured(model, branch) for branch in branches)
+
+    block_ids = ((node.get("content") or {}).get("block_ids") or [])
+    if block_ids:
+        return True
+
+    children = [
+        child
+        for child in model.get("nodes") or []
+        if child.get("parent_id") == node.get("id")
+    ]
+    if not children:
+        return False
+    return any(_v5_node_configured(model, child) for child in children)
+
+
+def _v5_has_configured(model: dict) -> bool:
+    roots = [node for node in model.get("nodes") or [] if not node.get("parent_id")]
+    if not roots:
+        return False
+    return any(_v5_node_configured(model, root) for root in roots)
+
+
+def _v5_rules_ready_to_apply(model: dict, condition_values: dict) -> bool:
+    active_ids = _v5_active_field_ids(model)
+    if not active_ids:
+        return False
+    if not _v5_has_configured(model):
+        return False
+    return all(condition_values.get(field_id) is not None for field_id in active_ids)
+
+
+def _v5_preview_conditions_ready(model: dict, condition_values: dict) -> bool:
+    """True when every referenced condition field has a chosen value."""
+    active_ids = _v5_active_field_ids(model)
+    if not active_ids:
+        return False
+    return all(condition_values.get(field_id) is not None for field_id in active_ids)
+
+
+def _coerce_rules(rules: dict | None) -> dict:
+    if _is_v5_model(rules):
+        return rules
+    return normalize_rules(rules)
+
+
+def _persist_rules(path: Path, rules: dict) -> dict:
+    rules = _coerce_rules(rules)
+    if _is_v5_model(rules):
+        save_document_model(path, rules)
+    else:
+        save_variant_rules(path, rules)
+    return rules
+
+
+def _rules_meta(rules: dict) -> dict[str, object]:
+    if _is_v5_model(rules):
+        return {
+            "has_configured_rules": _v5_has_configured(rules),
+            "active_condition_ids": _v5_active_field_ids(rules),
+        }
+    return {
+        "has_configured_rules": has_configured_rules(rules),
+        "active_condition_ids": get_active_condition_ids(rules),
+    }
+
+
+def _rules_ready(rules: dict, condition_values: dict) -> bool:
+    if _is_v5_model(rules):
+        return _v5_rules_ready_to_apply(rules, condition_values)
+    return bool(_rules_ready_to_apply(rules, condition_values))
+
+
+def _should_finalize_preview(
+    rules: dict,
+    condition_values: dict,
+    settings: dict | None = None,
+) -> bool:
+    """Remove inactive blocks only for approved / approval-preview export views."""
+    settings = settings or {}
+    if not condition_values:
+        return False
+    if not settings.get("approved") and not settings.get("approval_pending"):
+        return False
+    if _is_v5_model(rules):
+        return _v5_preview_conditions_ready(rules, condition_values)
+    return _rules_ready(rules, condition_values)
+
+
+def _load_rules_for_document(path: Path, source_html: str) -> dict:
+    document_model = load_document_model(path)
+    if _is_v5_model(document_model):
+        return document_model
+    stored_rules = load_variant_rules(path)
+    return load_or_detect_rules(source_html, stored_rules)
+
+
 def _load_docx_context(path: Path) -> dict:
     saved_html = load_edit_html(path)
     if saved_html and needs_numbering_refresh(saved_html):
@@ -51,8 +194,7 @@ def _load_docx_context(path: Path) -> dict:
 
     source_html = annotate_blocks(source_html)
     settings = load_document_settings(path)
-    stored_rules = load_variant_rules(path)
-    rules = load_or_detect_rules(source_html, stored_rules)
+    rules = _load_rules_for_document(path, source_html)
 
     return {
         "saved_html": saved_html,
@@ -64,10 +206,18 @@ def _load_docx_context(path: Path) -> dict:
 
 def _document_settings(ctx: dict) -> dict:
     settings = dict(ctx["settings"])
+    rules = ctx["rules"]
     settings["has_contract_variants"] = has_contract_variants(ctx["source_html"])
-    settings["has_configured_rules"] = has_configured_rules(ctx["rules"])
-    settings["active_condition_ids"] = get_active_condition_ids(ctx["rules"])
-    settings["variant_rules"] = ctx["rules"]
+    if _is_v5_model(rules):
+        settings["document_model"] = rules
+        settings["variant_rules"] = rules
+        settings["has_configured_rules"] = _v5_has_configured(rules)
+        settings["active_condition_ids"] = _v5_active_field_ids(rules)
+        return settings
+
+    settings["has_configured_rules"] = has_configured_rules(rules)
+    settings["active_condition_ids"] = get_active_condition_ids(rules)
+    settings["variant_rules"] = rules
     return settings
 
 
@@ -91,11 +241,11 @@ def build_preview(path: Path, extension: str, name: str) -> tuple[str | None, st
 
     if extension == ".docx":
         ctx = _load_docx_context(path)
-        ctx["rules"] = normalize_rules(ctx["rules"])
-        save_variant_rules(path, ctx["rules"])
+        if not _is_v5_model(ctx["rules"]):
+            ctx["rules"] = normalize_rules(ctx["rules"])
+            save_variant_rules(path, ctx["rules"])
 
         open_settings = dict(ctx["settings"])
-        open_settings["condition_values"] = {}
         open_settings.pop("is_bank_employee", None)
         open_settings["approved"] = False
         open_settings["approval_pending"] = False
@@ -226,9 +376,54 @@ def _session_source_html(
 
 def _build_edit_view_from_source(ctx: dict) -> tuple[str, dict]:
     condition_values = _condition_values_from_settings(ctx["settings"])
-    highlights = get_highlight_map(ctx["rules"], condition_values=condition_values)
+    rules = ctx["rules"]
+
+    if _is_v5_model(rules):
+        marked_html = apply_document_model(
+            ctx["source_html"],
+            rules,
+            condition_values=condition_values,
+            finalize=_should_finalize_preview(
+                rules, condition_values, ctx["settings"]
+            ),
+        )
+        return make_structure_editable(marked_html), _document_settings(ctx)
+
+    highlights = get_highlight_map(rules, condition_values=condition_values)
     marked_html = apply_highlights(ctx["source_html"], highlights)
     return make_structure_editable(marked_html), _document_settings(ctx)
+
+
+def _apply_rules_setting(
+    ctx: dict,
+    *,
+    condition_values: dict,
+    rules: dict | None = None,
+) -> tuple[str, dict]:
+    if rules is not None:
+        ctx = {**ctx, "rules": _coerce_rules(rules)}
+
+    settings = {
+        **ctx["settings"],
+        "condition_values": condition_values,
+        "approved": False,
+        "approval_pending": False,
+        "has_contract_variants": has_contract_variants(ctx["source_html"]),
+        **_rules_meta(ctx["rules"]),
+    }
+    settings.pop("approved_at", None)
+    if _is_v5_model(ctx["rules"]):
+        settings["document_model"] = ctx["rules"]
+        settings.pop("variant_rules", None)
+    else:
+        settings["variant_rules"] = ctx["rules"]
+
+    filtered_html = _build_preview_display_html(
+        ctx["source_html"],
+        ctx["rules"],
+        settings,
+    )
+    return filtered_html, settings
 
 
 def apply_document_setting(
@@ -240,10 +435,11 @@ def apply_document_setting(
 ) -> tuple[str, dict]:
     ctx = _load_docx_context(path)
     if rules is not None:
-        ctx["rules"] = normalize_rules(rules)
+        ctx["rules"] = _persist_rules(path, rules)
+    elif _is_v5_model(ctx["rules"]):
+        ctx["rules"] = _persist_rules(path, ctx["rules"])
     else:
-        ctx["rules"] = normalize_rules(ctx["rules"])
-    save_variant_rules(path, ctx["rules"])
+        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
 
     if all_condition_values is not None:
         condition_values = {
@@ -255,26 +451,11 @@ def apply_document_setting(
         condition_values = _explicit_condition_values(ctx["settings"])
         condition_values[condition_id] = value
 
-    filtered_html = _build_preview_display_html(
-        ctx["source_html"],
-        ctx["rules"],
-        {
-            **ctx["settings"],
-            "condition_values": condition_values,
-        },
+    filtered_html, settings = _apply_rules_setting(
+        ctx,
+        condition_values=condition_values,
+        rules=ctx["rules"],
     )
-
-    settings = {
-        **ctx["settings"],
-        "condition_values": condition_values,
-        "approved": False,
-        "approval_pending": False,
-        "has_contract_variants": has_contract_variants(ctx["source_html"]),
-        "has_configured_rules": has_configured_rules(ctx["rules"]),
-        "active_condition_ids": get_active_condition_ids(ctx["rules"]),
-        "variant_rules": ctx["rules"],
-    }
-    settings.pop("approved_at", None)
     if condition_id == "bank_employee":
         settings["is_bank_employee"] = value
 
@@ -300,10 +481,11 @@ def clear_document_setting(
 ) -> tuple[str, dict]:
     ctx = _load_docx_context(path)
     if rules is not None:
-        ctx["rules"] = normalize_rules(rules)
+        ctx["rules"] = _persist_rules(path, rules)
+    elif _is_v5_model(ctx["rules"]):
+        ctx["rules"] = _persist_rules(path, ctx["rules"])
     else:
-        ctx["rules"] = normalize_rules(ctx["rules"])
-    save_variant_rules(path, ctx["rules"])
+        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
 
     if all_condition_values is not None:
         condition_values = {
@@ -315,24 +497,14 @@ def clear_document_setting(
         condition_values = _explicit_condition_values(ctx["settings"])
         condition_values.pop(condition_id, None)
 
-    settings = {
-        **ctx["settings"],
-        "condition_values": condition_values,
-        "approved": False,
-        "has_contract_variants": has_contract_variants(ctx["source_html"]),
-        "has_configured_rules": has_configured_rules(ctx["rules"]),
-        "active_condition_ids": get_active_condition_ids(ctx["rules"]),
-        "variant_rules": ctx["rules"],
-    }
-    settings.pop("approved_at", None)
+    display_html, settings = _apply_rules_setting(
+        ctx,
+        condition_values=condition_values,
+        rules=ctx["rules"],
+    )
     if condition_id == "bank_employee":
         settings.pop("is_bank_employee", None)
 
-    display_html = _build_preview_display_html(
-        ctx["source_html"],
-        ctx["rules"],
-        settings,
-    )
     save_edit_html(
         path,
         display_html,
@@ -350,10 +522,11 @@ def preview_approval_document(
 ) -> tuple[str, dict]:
     ctx = _load_docx_context(path)
     if rules is not None:
-        ctx["rules"] = normalize_rules(rules)
+        ctx["rules"] = _persist_rules(path, rules)
+    elif _is_v5_model(ctx["rules"]):
+        ctx["rules"] = _persist_rules(path, ctx["rules"])
     else:
-        ctx["rules"] = normalize_rules(ctx["rules"])
-    save_variant_rules(path, ctx["rules"])
+        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
 
     if all_condition_values is not None:
         condition_values = {
@@ -364,17 +537,25 @@ def preview_approval_document(
     else:
         condition_values = _explicit_condition_values(ctx["settings"])
 
-    if not _rules_ready_to_apply(ctx["rules"], condition_values):
+    if not _rules_ready(ctx["rules"], condition_values):
         raise ValueError(
             "Заповніть усі умови та правила (група або маркер) перед затвердженням"
         )
 
-    preview_html = apply_variant_rules(
-        ctx["source_html"],
-        ctx["rules"],
-        condition_values=condition_values,
-        finalize=True,
-    )
+    if _is_v5_model(ctx["rules"]):
+        preview_html = apply_document_model(
+            ctx["source_html"],
+            ctx["rules"],
+            condition_values=condition_values,
+            finalize=True,
+        )
+    else:
+        preview_html = apply_variant_rules(
+            ctx["source_html"],
+            ctx["rules"],
+            condition_values=condition_values,
+            finalize=True,
+        )
 
     draft_source = ctx["source_html"]
     settings = {
@@ -383,11 +564,12 @@ def preview_approval_document(
         "approved": False,
         "approval_pending": True,
         "has_contract_variants": has_contract_variants(draft_source),
-        "has_configured_rules": has_configured_rules(ctx["rules"]),
-        "active_condition_ids": get_active_condition_ids(ctx["rules"]),
+        **_rules_meta(ctx["rules"]),
         "variant_rules": ctx["rules"],
     }
     settings.pop("approved_at", None)
+    if _is_v5_model(ctx["rules"]):
+        settings["document_model"] = ctx["rules"]
 
     save_edit_html(
         path,
@@ -410,10 +592,11 @@ def cancel_approval_preview(
         raise ValueError("Немає перегляду для скасування")
 
     if rules is not None:
-        ctx["rules"] = normalize_rules(rules)
+        ctx["rules"] = _persist_rules(path, rules)
+    elif _is_v5_model(ctx["rules"]):
+        ctx["rules"] = _persist_rules(path, ctx["rules"])
     else:
-        ctx["rules"] = normalize_rules(ctx["rules"])
-    save_variant_rules(path, ctx["rules"])
+        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
 
     draft_source = load_draft_source_html(path) or ctx["source_html"]
 
@@ -432,11 +615,12 @@ def cancel_approval_preview(
         "approved": False,
         "approval_pending": False,
         "has_contract_variants": has_contract_variants(draft_source),
-        "has_configured_rules": has_configured_rules(ctx["rules"]),
-        "active_condition_ids": get_active_condition_ids(ctx["rules"]),
+        **_rules_meta(ctx["rules"]),
         "variant_rules": ctx["rules"],
     }
     settings.pop("approved_at", None)
+    if _is_v5_model(ctx["rules"]):
+        settings["document_model"] = ctx["rules"]
 
     preview_html = _build_preview_display_html(draft_source, ctx["rules"], settings)
     save_edit_html(
@@ -457,10 +641,11 @@ def approve_document(
 ) -> tuple[str, dict]:
     ctx = _load_docx_context(path)
     if rules is not None:
-        ctx["rules"] = normalize_rules(rules)
+        ctx["rules"] = _persist_rules(path, rules)
+    elif _is_v5_model(ctx["rules"]):
+        ctx["rules"] = _persist_rules(path, ctx["rules"])
     else:
-        ctx["rules"] = normalize_rules(ctx["rules"])
-    save_variant_rules(path, ctx["rules"])
+        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
 
     if all_condition_values is not None:
         condition_values = {
@@ -476,17 +661,25 @@ def approve_document(
             "Спочатку натисніть «Затвердити» і перегляньте документ без інструкцій"
         )
 
-    if not _rules_ready_to_apply(ctx["rules"], condition_values):
+    if not _rules_ready(ctx["rules"], condition_values):
         raise ValueError(
             "Заповніть усі умови та правила (група або маркер) перед затвердженням"
         )
 
-    final_html = apply_variant_rules(
-        ctx["source_html"],
-        ctx["rules"],
-        condition_values=condition_values,
-        finalize=True,
-    )
+    if _is_v5_model(ctx["rules"]):
+        final_html = apply_document_model(
+            ctx["source_html"],
+            ctx["rules"],
+            condition_values=condition_values,
+            finalize=True,
+        )
+    else:
+        final_html = apply_variant_rules(
+            ctx["source_html"],
+            ctx["rules"],
+            condition_values=condition_values,
+            finalize=True,
+        )
 
     draft_source = ctx["source_html"]
 
@@ -497,10 +690,11 @@ def approve_document(
         "approval_pending": False,
         "approved_at": datetime.now(timezone.utc).isoformat(),
         "has_contract_variants": has_contract_variants(draft_source),
-        "has_configured_rules": has_configured_rules(ctx["rules"]),
-        "active_condition_ids": get_active_condition_ids(ctx["rules"]),
+        **_rules_meta(ctx["rules"]),
         "variant_rules": ctx["rules"],
     }
+    if _is_v5_model(ctx["rules"]):
+        settings["document_model"] = ctx["rules"]
 
     write_docx_from_html(path, final_html)
     save_edit_html(
@@ -524,10 +718,11 @@ def revert_document_approval(
         raise ValueError("Документ ще не затверджено")
 
     if rules is not None:
-        ctx["rules"] = normalize_rules(rules)
+        ctx["rules"] = _persist_rules(path, rules)
+    elif _is_v5_model(ctx["rules"]):
+        ctx["rules"] = _persist_rules(path, ctx["rules"])
     else:
-        ctx["rules"] = normalize_rules(ctx["rules"])
-    save_variant_rules(path, ctx["rules"])
+        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
 
     draft_source = load_draft_source_html(path)
     if not draft_source:
@@ -548,11 +743,12 @@ def revert_document_approval(
         "approved": False,
         "approval_pending": False,
         "has_contract_variants": has_contract_variants(draft_source),
-        "has_configured_rules": has_configured_rules(ctx["rules"]),
-        "active_condition_ids": get_active_condition_ids(ctx["rules"]),
+        **_rules_meta(ctx["rules"]),
         "variant_rules": ctx["rules"],
     }
     settings.pop("approved_at", None)
+    if _is_v5_model(ctx["rules"]):
+        settings["document_model"] = ctx["rules"]
 
     preview_html = _build_preview_display_html(draft_source, ctx["rules"], settings)
 
@@ -614,6 +810,19 @@ def save_docx_content(path: Path, html_content: str) -> dict:
 
 def save_rules_and_refresh(path: Path, rules: dict) -> tuple[str, dict]:
     ctx = _load_docx_context(path)
+
+    if _is_v5_model(rules):
+        save_document_model(path, rules)
+        ctx["rules"] = rules
+        marked_html = ctx["source_html"]
+        save_edit_html(
+            path,
+            make_structure_editable(marked_html),
+            source_html=ctx["source_html"],
+            settings=ctx["settings"],
+        )
+        return make_structure_editable(marked_html), _document_settings(ctx)
+
     rules = normalize_rules(rules)
 
     save_variant_rules(path, rules)
@@ -643,6 +852,23 @@ def save_rules_and_refresh(path: Path, rules: dict) -> tuple[str, dict]:
 
 def _build_preview_display_html(source_html: str, rules: dict, settings: dict) -> str:
     condition_values = _explicit_condition_values(settings)
+    finalize = _should_finalize_preview(rules, condition_values, settings)
+
+    if _is_v5_model(rules):
+        return apply_document_model(
+            source_html,
+            rules,
+            condition_values=condition_values,
+            finalize=finalize,
+        )
+
+    if finalize:
+        return apply_variant_rules(
+            source_html,
+            rules,
+            condition_values=condition_values,
+            finalize=True,
+        )
 
     if settings.get("approved") and _rules_ready_to_apply(rules, condition_values):
         return apply_variant_rules(

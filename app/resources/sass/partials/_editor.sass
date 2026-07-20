@@ -380,6 +380,27 @@
       padding-left: 8px
       margin-bottom: 8pt !important
 
+    [data-block-id].docx-block--content-inactive.docx-instruction
+      color: color-mix(in srgb, var(--doc-text) 58%, $text-muted) !important
+      opacity: .52
+      font-style: normal
+      border-left: none
+      padding-left: 10px
+      margin-bottom: 0 !important
+
+    [data-block-id].docx-block--content-active.docx-instruction
+      color: inherit !important
+      opacity: 1
+      font-style: normal
+      border-left: none
+      padding-left: 10px
+      margin-bottom: 0 !important
+
+    [data-block-id].docx-block--content-inactive .docx-instruction-text,
+    [data-block-id].docx-block--content-active .docx-instruction-text
+      color: inherit !important
+      opacity: 1
+
     .docx-instruction-text
       color: color-mix(in srgb, #c0392b 68%, var(--doc-text)) !important
       opacity: .85
