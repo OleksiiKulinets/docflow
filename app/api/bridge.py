@@ -1,7 +1,11 @@
+import logging
+import threading
+
 from api.encoding import encode_html_fields
 from api.export_dialog import export_file_to_dialog
 from services import file_service
-import threading
+
+_log = logging.getLogger("docflow.api")
 
 
 class DocFlowApi:
@@ -52,7 +56,15 @@ class DocFlowApi:
         return payload
 
     def _fail(self, exc: Exception) -> dict:
+        _log.exception("API error: %s", exc)
         return {"ok": False, "error": str(exc)}
+
+    def debug_log(self, source: str, message: str, detail: str | None = None) -> dict:
+        text = f"{source}: {message}"
+        if detail:
+            text = f"{text} | {detail}"
+        _log.info(text)
+        return {"ok": True}
 
     def _encode(self, data: dict) -> dict:
         return encode_html_fields(data)
@@ -188,7 +200,14 @@ class DocFlowApi:
 
     def get_edit_view(self, file_id: str, html_b64: str | None = None) -> dict:
         try:
+            _log.info("get_edit_view file_id=%s html_b64=%s", file_id, bool(html_b64))
             data = file_service.get_edit_view(file_id, html_b64)
+            edit_html = data.get("edit_html") or ""
+            _log.info(
+                "get_edit_view ok file_id=%s edit_html_chars=%d",
+                file_id,
+                len(edit_html),
+            )
             return self._ok(self._encode(data))
         except Exception as exc:
             return self._fail(exc)
@@ -202,7 +221,16 @@ class DocFlowApi:
 
     def sync_document_source(self, file_id: str, html_b64: str) -> dict:
         try:
+            _log.info("sync_document_source file_id=%s html_b64_chars=%d", file_id, len(html_b64 or ""))
             data = file_service.sync_document_source(file_id, html_b64)
+            edit_html = data.get("edit_html") or ""
+            preview_html = data.get("preview_html") or ""
+            _log.info(
+                "sync_document_source ok file_id=%s preview_chars=%d edit_chars=%d",
+                file_id,
+                len(preview_html),
+                len(edit_html),
+            )
             return self._ok(self._encode(data))
         except Exception as exc:
             return self._fail(exc)

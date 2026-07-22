@@ -4,6 +4,7 @@ from docflow_docx.structure import (
     apply_variant_rules,
     get_active_condition_ids,
     has_configured_rules,
+    merge_edited_into_source,
     normalize_rules,
 )
 
@@ -528,3 +529,52 @@ def test_merge_edited_into_source_removes_deleted_blocks():
 
     merged_fallback = merge_edited_into_source(source, edited)
     assert "Remove me" not in merged_fallback
+
+
+def test_annotate_table_cell_paragraphs_separately():
+    from bs4 import BeautifulSoup
+
+    html = annotate_blocks(
+        '<table class="docx-table"><tbody><tr>'
+        '<td><p class="docx-p">Variant 1 text</p><p class="docx-p">Variant 2 text</p></td>'
+        "</tr></tbody></table>"
+    )
+    soup = BeautifulSoup(f"<div>{html}</div>", "html.parser")
+    blocks = soup.find_all(attrs={"data-block-id": True})
+    assert len(blocks) == 2
+    texts = [block.get_text(strip=True) for block in blocks]
+    assert "Variant 1 text" in texts
+    assert "Variant 2 text" in texts
+    assert soup.find("table").get("data-block-id") is None
+
+
+def test_merge_removes_deleted_table_without_empty_shell():
+    from bs4 import BeautifulSoup
+    from docflow_docx.sanitize import sanitize_edit_html
+
+    source = annotate_blocks(
+        '<table class="docx-table"><tbody><tr>'
+        '<td><p class="docx-p">Cell A</p><p class="docx-p">Cell B</p></td>'
+        "</tr></tbody></table>"
+        "<p>After table</p>"
+    )
+    soup = BeautifulSoup(f"<div>{source}</div>", "html.parser")
+    after_block = next(
+        p for p in soup.find_all("p") if p.get_text(strip=True) == "After table"
+    )
+    after_id = after_block["data-block-id"]
+    edited = f'<p data-block-id="{after_id}">After table</p>'
+
+    merged = merge_edited_into_source(source, edited)
+    assert "Cell A" not in merged
+    assert "Cell B" not in merged
+    assert "After table" in merged
+    assert "<table" not in merged.lower()
+
+    cleaned = sanitize_edit_html(
+        '<table class="docx-table"><tbody><tr>'
+        '<td><p class="docx-p">&nbsp;</p></td></tr>'
+        '<tr><td><p class="docx-p"> </p></td></tr>'
+        "</tbody></table>"
+    )
+    assert "<table" not in cleaned.lower()

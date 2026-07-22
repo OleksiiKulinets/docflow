@@ -17,7 +17,7 @@
   height: var(--toolbar-height)
   min-height: var(--toolbar-height)
   max-height: var(--toolbar-height)
-  padding: 0 12px
+  padding: 0 12px 0 0
   border-bottom: 1px solid $border
   background: $bg-sidebar
   overflow-x: auto
@@ -30,9 +30,12 @@
 .rules-panel-chrome-start
   display: flex
   align-items: stretch
-  gap: 4px
+  gap: 0
   min-width: 0
   flex: 1 1 auto
+
+  .rules-panel-back:not([hidden]) + .rules-segment-nav .rules-segment-nav-item:first-child
+    padding-left: 0
 
 .rules-panel-chrome-actions
   display: flex
@@ -93,6 +96,9 @@
 
 .rules-segment-nav-item
   @include chrome-nav-tab
+
+.rules-panel-chrome-start:not(:has(.rules-panel-back:not([hidden]))) .rules-segment-nav-item:first-child
+  padding-left: 12px
 
 // Editor mode label in chrome (replaces tabs)
 .rules-panel-editor-label
@@ -174,15 +180,19 @@
   &[hidden]
     display: none !important
 
+  .rules-variant-nav
+    margin: 0 0 $space-2
+
 .rules-editor-context-strip .rules-context-tabs
   display: flex
-  align-items: center
-  gap: $space-1
-  min-height: $control-height
+  align-items: stretch
+  gap: $space-2
+  min-height: 0
 
 .rules-editor-context-strip .rules-context-tab
-  height: calc(#{$control-height} - 4px)
-  padding: 0 $space-2
+  height: auto
+  min-height: calc(#{$control-height} - 4px)
+  padding: $space-1 $space-2
   border: 1px solid transparent
   border-radius: $radius-sm
   background: transparent

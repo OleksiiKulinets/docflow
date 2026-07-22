@@ -34,18 +34,22 @@
     display: none
 
   &.workspace-chrome--main
-    padding: 0 12px
+    padding: 0 12px 0 0
 
 .content-toolbar-left
   display: flex
   align-items: stretch
-  gap: 4px
+  gap: 0
   min-width: 0
   flex: 1 1 auto
 
   .sidebar-toggle--expand
     flex-shrink: 0
     align-self: center
+    margin-right: 0
+
+  .sidebar-toggle--expand:not([hidden]) + .tab-nav .tab-nav-item:first-child
+    padding-left: 0
 
 .content-toolbar-actions
   display: flex
@@ -75,13 +79,30 @@
 // Collapsed file sidebar — keep toolbar tabs aligned to bottom border
 .page.is-sidebar-collapsed
   .content-toolbar
-    padding-left: 8px
+    padding-left: 0
 
   .tab-nav-item
     padding: 0 12px
 
 .preview-panel.is-approved .docx-canvas
   box-shadow: inset 0 0 0 1px rgba(76, 175, 80, 0.45)
+
+// After approve — clean final document (inactive blocks removed server-side).
+.preview-panel.is-approved
+  .docx-block--content-active,
+  .docx-block--content-inactive
+    opacity: 1
+    background: transparent
+    padding-left: 0
+    filter: none
+    color: inherit
+    text-decoration: none
+
+    &::before
+      display: none
+
+  .docx-block--content-inactive
+    display: none
 
 .preview-panel.is-approval-pending .docx-canvas
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16)

@@ -24,6 +24,24 @@ def sanitize_edit_html(html: str) -> str:
     return root.decode_contents()
 
 
+def _cell_has_content(cell: Tag) -> bool:
+    text = cell.get_text().replace(ZWSP, "").replace("\xa0", "").strip()
+    if text:
+        return True
+    return bool(cell.find(["img", "table"]))
+
+
+def _row_has_content(row: Tag) -> bool:
+    cells = row.find_all(list(CELL_TAGS), recursive=False)
+    if not cells:
+        return False
+    return any(_cell_has_content(cell) for cell in cells)
+
+
+def _table_has_content(table: Tag) -> bool:
+    return any(_row_has_content(row) for row in table.find_all("tr"))
+
+
 def _remove_orphan_table_parts(root: Tag) -> None:
     for tag_name in ("tr", "td", "th", "tbody", "thead", "tfoot"):
         for node in list(root.find_all(tag_name)):
@@ -33,8 +51,15 @@ def _remove_orphan_table_parts(root: Tag) -> None:
 
 def _normalize_tables(root: Tag) -> None:
     for table in list(root.find_all("table")):
-        rows = table.find_all("tr")
-        if not rows:
+        for row in list(table.find_all("tr")):
+            cells = row.find_all(list(CELL_TAGS), recursive=False)
+            if not cells or not _row_has_content(row):
+                row.decompose()
+                continue
+            for cell in cells:
+                _normalize_cell(cell)
+
+        if not table.find_all("tr") or not _table_has_content(table):
             table.decompose()
             continue
 
@@ -43,14 +68,6 @@ def _normalize_tables(root: Tag) -> None:
             for row in list(table.find_all("tr", recursive=False)):
                 tbody.append(row.extract())
             table.append(tbody)
-
-        for row in list(table.find_all("tr")):
-            cells = row.find_all(list(CELL_TAGS), recursive=False)
-            if not cells:
-                row.decompose()
-                continue
-            for cell in cells:
-                _normalize_cell(cell)
 
 
 def _normalize_cell(cell: Tag) -> None:

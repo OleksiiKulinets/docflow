@@ -181,13 +181,29 @@ const Editor = (() => {
     });
   }
 
+  function cellHasContent(cell) {
+    const text = (cell.textContent || "").replace(ZWSP, "").replace(NBSP, " ").trim();
+    if (text) return true;
+    return Boolean(cell.querySelector("img, table"));
+  }
+
+  function rowHasContent(row) {
+    const cells = [...row.querySelectorAll(":scope > td, :scope > th")];
+    if (!cells.length) return false;
+    return cells.some(cellHasContent);
+  }
+
   function normalizeTables(root) {
     root.querySelectorAll("tr").forEach((row) => {
-      if (!row.querySelector("td, th")) row.remove();
+      if (!row.querySelector("td, th") || !rowHasContent(row)) row.remove();
     });
 
     root.querySelectorAll("table").forEach((table) => {
       if (!table.querySelector("tr")) {
+        table.remove();
+        return;
+      }
+      if (![...table.querySelectorAll("tr")].some(rowHasContent)) {
         table.remove();
         return;
       }

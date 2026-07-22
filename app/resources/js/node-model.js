@@ -716,6 +716,85 @@ const NodeModel = (() => {
     return [...ids];
   }
 
+  function evaluateV5Condition(condition, values) {
+    if (!condition) return true;
+    if (condition.type === "predicate") {
+      const conditionId = condition.condition_id;
+      if (!conditionId || values[conditionId] === undefined || values[conditionId] === null) {
+        return false;
+      }
+      const active = values[conditionId];
+      const operator = condition.operator || "eq";
+      const expected = condition.value;
+      if (operator === "eq") return active === expected;
+      if (operator === "neq") return active !== expected;
+      return false;
+    }
+    if (condition.type === "not") {
+      return !evaluateV5Condition(condition.item, values);
+    }
+    if (condition.type === "and") {
+      const items = condition.items || [];
+      return Boolean(items.length) && items.every((item) => evaluateV5Condition(item, values));
+    }
+    if (condition.type === "or") {
+      return (condition.items || []).some((item) => evaluateV5Condition(item, values));
+    }
+    return false;
+  }
+
+  function isVariantForkNode(model, node) {
+    if (!node) return false;
+    const branches = orderedChildren(model, node.id).filter(
+      (child) => child.type === "section" && child.condition,
+    );
+    if (branches.length < 2) return false;
+    if (isExclusiveSection(node)) return true;
+    return node.type === "marker";
+  }
+
+  function exclusiveForkFieldIds(model, forkNode) {
+    const ids = new Set();
+    orderedChildren(model, forkNode.id)
+      .filter((child) => child.type === "section" && child.condition)
+      .forEach((child) => collectFieldIdsFromCondition(child.condition, ids));
+    return [...ids];
+  }
+
+  /** Fields to show in preview — parent first, nested only when parent branch is active. */
+  function collectReachableFieldIds(model, values = {}) {
+    const reachable = [];
+
+    function walk(node) {
+      if (node.condition && !evaluateV5Condition(node.condition, values)) {
+        return;
+      }
+
+      if (isVariantForkNode(model, node)) {
+        const fieldIds = exclusiveForkFieldIds(model, node);
+        const unset = fieldIds.filter(
+          (fieldId) => values[fieldId] === undefined || values[fieldId] === null,
+        );
+        unset.forEach((fieldId) => {
+          if (!reachable.includes(fieldId)) reachable.push(fieldId);
+        });
+        if (unset.length) return;
+
+        orderedChildren(model, node.id)
+          .filter((child) => child.type === "section" && child.condition)
+          .forEach((branch) => {
+            if (evaluateV5Condition(branch.condition, values)) walk(branch);
+          });
+        return;
+      }
+
+      orderedChildren(model, node.id).forEach((child) => walk(child));
+    }
+
+    rootNodes(model).forEach((root) => walk(root));
+    return reachable;
+  }
+
   function nodeIsConfigured(model, node) {
     if (!node) return false;
 
@@ -932,6 +1011,9 @@ const NodeModel = (() => {
     collectAssignedBlockMap,
     isExclusiveSection,
     collectRequiredFieldIds,
+    collectReachableFieldIds,
+    evaluateV5Condition,
+    isVariantForkNode,
     hasConfiguredNodes,
     toDocumentModel,
     newId,

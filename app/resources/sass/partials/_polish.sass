@@ -403,7 +403,7 @@
 
 // Conditions setup hint
 .conditions-setup-hint
-  margin-bottom: $space-2
+  margin: 0 0 $space-2
   border-radius: $radius-sm
 
 // Ribbon active state — align with accent (not legacy blue)
@@ -420,6 +420,9 @@
 .content-toolbar-left .tab-nav
   margin-left: 0
   padding-left: 0
+
+.content-toolbar-left:not(:has(.sidebar-toggle--expand:not([hidden]))) .tab-nav-item:first-child
+  padding-left: 12px
 
 .statusbar
   gap: $space-2

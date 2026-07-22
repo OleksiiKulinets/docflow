@@ -1,7 +1,9 @@
 import json
 import os
 import re
+import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -100,30 +102,52 @@ def _normalize_edit_payload(data: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+_edit_json_locks_guard = threading.Lock()
+_edit_json_locks: dict[str, threading.Lock] = {}
+
+
+def _edit_json_lock(path: Path) -> threading.Lock:
+    key = str(path.resolve())
+    with _edit_json_locks_guard:
+        lock = _edit_json_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _edit_json_locks[key] = lock
+        return lock
+
+
 def _write_edit_data(file_path: Path, data: dict[str, Any]) -> None:
     path = edit_json_path(file_path)
     payload = _normalize_edit_payload(data)
     encoded = json.dumps(payload, ensure_ascii=False, indent=2)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    temp_path = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    temp_path.write_text(encoded, encoding="utf-8")
-    try:
-        for attempt in range(8):
-            try:
-                os.replace(temp_path, path)
-                return
-            except PermissionError:
-                if attempt == 7:
-                    break
-                time.sleep(0.05 * (attempt + 1))
-        path.write_text(encoded, encoding="utf-8")
-    finally:
-        if temp_path.exists():
-            try:
-                temp_path.unlink()
-            except OSError:
-                pass
+    with _edit_json_lock(path):
+        temp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temp_path.write_text(encoded, encoding="utf-8")
+            for attempt in range(8):
+                try:
+                    os.replace(temp_path, path)
+                    return
+                except PermissionError:
+                    if attempt == 7:
+                        break
+                    time.sleep(0.05 * (attempt + 1))
+                except OSError as exc:
+                    if getattr(exc, "winerror", None) == 2 or exc.errno == 2:
+                        if attempt == 7:
+                            break
+                        temp_path.write_text(encoded, encoding="utf-8")
+                        continue
+                    raise
+            path.write_text(encoded, encoding="utf-8")
+        finally:
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
 
 
 def _raw_has_extra_json(raw: str) -> bool:

@@ -3,7 +3,8 @@
 
 $tree-row-h: 36px
 $tree-indent-step: 20px
-$tree-pad-x: 12px
+$tree-pad-x: 0
+$tree-pad-end: 12px
 $tree-expander-w: 16px
 $tree-icon-w: 16px
 $tree-gap: 8px
@@ -45,7 +46,8 @@ $tree-action-w: 20px
   gap: $tree-gap
   height: $tree-row-h
   min-height: $tree-row-h
-  padding-inline: $tree-pad-x
+  padding-left: $tree-pad-x
+  padding-right: $tree-pad-end
   border: none
   background: transparent
   cursor: pointer
@@ -83,7 +85,7 @@ $tree-action-w: 20px
     content: ""
     position: absolute
     left: calc(#{$tree-pad-x} + var(--tree-depth, 0) * #{$tree-indent-step})
-    right: $tree-pad-x
+    right: $tree-pad-end
     height: 2px
     background: $accent
     pointer-events: none

@@ -9,6 +9,7 @@ from docflow_docx.colors import (
     remove_red_color_from_style,
     style_has_red,
 )
+from docflow_docx.sanitize import sanitize_edit_html
 from docflow_docx.pages import patch_docx_root
 
 BLOCK_TAGS = frozenset({"p", "h1", "h2", "h3", "h4", "h5", "h6", "table", "ul", "ol"})
@@ -1346,7 +1347,7 @@ def apply_document_model(
     if finalize and ready:
         remove_ids = _v5_all_blocks(model) - active_blocks
         if remove_ids:
-            for block in _top_level_blocks(root):
+            for block in _iter_annotated_blocks(root):
                 block_id = block.get("data-block-id", "")
                 if block_id in remove_ids:
                     block.decompose()
@@ -1430,7 +1431,7 @@ def apply_variant_rules(
     if root is None:
         return html
 
-    for block in _top_level_blocks(root):
+    for block in _iter_annotated_blocks(root):
         block_id = block.get("data-block-id", "")
         if block_id in remove_ids:
             block.decompose()
@@ -1516,7 +1517,7 @@ def apply_highlights(html: str, highlights: dict[str, str]) -> str:
     if root is None:
         return html
 
-    for block in _top_level_blocks(root):
+    for block in _iter_annotated_blocks(root):
         block_id = block.get("data-block-id", "")
         role = highlights.get(block_id)
         classes = [c for c in (block.get("class") or []) if not c.startswith("docx-block--")]
@@ -1551,7 +1552,7 @@ def collect_top_level_block_ids(html: str) -> set[str]:
 
     return {
         block_id
-        for block in _top_level_blocks(root)
+        for block in _iter_annotated_blocks(root)
         if (block_id := block.get("data-block-id"))
     }
 
@@ -1576,7 +1577,7 @@ def merge_edited_into_source(
         return annotate_blocks(edited_html or source_html)
 
     edited_map: dict[str, Tag] = {}
-    for block in _top_level_blocks(edit_root):
+    for block in _iter_annotated_blocks(edit_root):
         block_id = block.get("data-block-id")
         if block_id:
             edited_map[block_id] = block
@@ -1585,7 +1586,7 @@ def merge_edited_into_source(
         return annotate_blocks(edited_html)
 
     known_ids = set()
-    for block in _top_level_blocks(src_root):
+    for block in _iter_annotated_blocks(src_root):
         block_id = block.get("data-block-id")
         if not block_id or block_id not in edited_map:
             continue
@@ -1597,23 +1598,25 @@ def merge_edited_into_source(
             src_root.append(block.extract())
 
     edited_ids = set(edited_map)
+    source_ids = {
+        block.get("data-block-id")
+        for block in _iter_annotated_blocks(src_root)
+        if block.get("data-block-id")
+    }
     if deletable_block_ids is not None:
-        remove_ids = deletable_block_ids - edited_ids
+        remove_ids = (deletable_block_ids & source_ids) - edited_ids
     elif not has_contract_variants(source_html):
-        remove_ids = {
-            block.get("data-block-id")
-            for block in _top_level_blocks(src_root)
-            if block.get("data-block-id") and block.get("data-block-id") not in edited_ids
-        }
+        remove_ids = source_ids - edited_ids
     else:
         remove_ids = set()
 
-    for block in list(_top_level_blocks(src_root)):
+    for block in list(_iter_annotated_blocks(src_root)):
         block_id = block.get("data-block-id")
         if block_id and block_id in remove_ids:
             block.decompose()
 
-    return annotate_blocks(src_root.decode_contents())
+    merged = src_root.decode_contents()
+    return annotate_blocks(sanitize_edit_html(merged))
 
 
 def _is_section_intro(block: Tag) -> bool:
@@ -1631,6 +1634,42 @@ def _is_conditional_include(block: Tag) -> bool:
         return False
     text = _normalize_text(block.get_text(" ", strip=True))
     return bool(_CONDITIONAL_INCLUDE_RE.search(text))
+
+
+def _direct_blocks_in_container(container: Tag) -> list[Tag]:
+    blocks: list[Tag] = []
+
+    for child in list(container.children):
+        if isinstance(child, NavigableString):
+            if not str(child).strip():
+                continue
+            wrapper = container.new_tag("p")
+            wrapper.string = str(child)
+            child.replace_with(wrapper)
+            blocks.append(wrapper)
+            continue
+
+        if not isinstance(child, Tag):
+            continue
+
+        classes = child.get("class") or []
+        if child.name == "div" and "docx-page-break" in classes:
+            blocks.append(child)
+            continue
+        if child.name == "div":
+            blocks.extend(_direct_blocks_in_container(child))
+            continue
+        if child.name in BLOCK_TAGS and child.name != "table":
+            blocks.append(child)
+
+    return blocks
+
+
+def _blocks_in_table(table: Tag) -> list[Tag]:
+    blocks: list[Tag] = []
+    for cell in table.find_all(["td", "th"], recursive=True):
+        blocks.extend(_direct_blocks_in_container(cell))
+    return blocks
 
 
 def _top_level_blocks(root: Tag) -> list[Tag]:
@@ -1656,10 +1695,17 @@ def _top_level_blocks(root: Tag) -> list[Tag]:
         if child.name == "div":
             blocks.extend(_top_level_blocks(child))
             continue
+        if child.name == "table":
+            blocks.extend(_blocks_in_table(child))
+            continue
         if child.name in BLOCK_TAGS:
             blocks.append(child)
 
     return blocks
+
+
+def _iter_annotated_blocks(root: Tag) -> list[Tag]:
+    return list(root.find_all(attrs={"data-block-id": True}))
 
 
 def is_red_block(block: Tag) -> bool:

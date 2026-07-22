@@ -56,6 +56,41 @@ let appCloseInProgress = false;
 const decodeApiHtml = ApiClient.decodeHtml;
 const encodeHtmlForApi = ApiClient.encodeHtml;
 
+function rulesEditorLog(message, detail = null) {
+  const suffix = detail != null ? ` | ${JSON.stringify(detail)}` : "";
+  const line = `[rules-editor] ${message}${suffix}`;
+  console.log(line);
+  window.pywebview?.api?.debug_log?.("rules-editor", message, detail != null ? JSON.stringify(detail) : null)?.catch?.(
+    () => {},
+  );
+}
+
+async function mountRulesEditorFromEditTab({ preserveNavigation = false, syncRulesBaseline = false } = {}) {
+  const editHtml = cachedEditHtml;
+  cachedEditHtml = null;
+  const remountOpts = { syncRulesBaseline, preserveNavigation };
+  if (editHtml?.trim() && mountRulesEditor(editHtml, remountOpts)) {
+    getRulesEditor()?.refreshConditionUi?.();
+    return true;
+  }
+  if (rulesEditorLoaded) {
+    if (editHtml?.trim()) {
+      setPreviewHtml(editHtml);
+      getRulesEditor()?.setModel?.(getInitialDocumentModel(), { preserveNavigation: true });
+      getRulesEditor()?.render?.();
+      getRulesEditor()?.refreshConditionUi?.();
+      rulesViewStale = false;
+      return true;
+    }
+    return true;
+  }
+  rulesEditorLog("mount from edit tab failed, calling get_edit_view", {
+    hasEditHtml: Boolean(editHtml?.trim()),
+  });
+  await loadEditView({ force: true });
+  return rulesEditorLoaded;
+}
+
 function isAllowedFile(file) {
   return AppUtils.isAllowedFile(file);
 }
@@ -78,10 +113,11 @@ function applyFileResult(result, { fileId, token } = {}) {
 
   currentDocumentSettings = {
     ...documentSettings,
-    condition_values: {},
+    condition_values: { ...(documentSettings.condition_values || {}) },
   };
   delete currentDocumentSettings.is_bank_employee;
   rulesViewStale = true;
+  rulesEditorLoaded = false;
   cachedEditHtml = null;
   cachedPreviewHtml = null;
   sessionInnerHtml = null;
@@ -186,6 +222,34 @@ function setStatus(message, isError = false) {
   els.statusText.classList.toggle("is-error", isError);
 }
 
+function isStructureModeMarkup(html) {
+  return typeof html === "string" && html.includes("docx-structure-mode");
+}
+
+function isPreviewDisplayDom() {
+  return Boolean(els.preview?.querySelector(".docx-editable:not(.docx-structure-mode)"));
+}
+
+function updateWorkspaceStatus() {
+  if (!currentFileId) {
+    setStatus("Готово");
+    return;
+  }
+  if (activeTab === "edit") {
+    setStatus("Редактор правил — структура, умови та прив’язка блоків");
+    return;
+  }
+  if (currentDocumentSettings.approved) {
+    setStatus(`Затверджено: ${currentFileName || "документ"}`);
+    return;
+  }
+  if (currentDocumentSettings.approval_pending) {
+    setStatus("Перегляд перед затвердженням");
+    return;
+  }
+  setStatus(`Перегляд: ${currentFileName || "документ"}`);
+}
+
 function formatSize(bytes) {
   return AppUtils.formatSize(bytes);
 }
@@ -232,7 +296,10 @@ async function syncDocumentSource({ html = null, quiet = false } = {}) {
     (activeTab === "preview" ? collectEditableHtml() : null) ||
     sessionInnerHtml ||
     cachedPreviewHtml;
-  if (!payloadHtml?.trim()) return true;
+  if (!payloadHtml?.trim()) {
+    rulesEditorLog("syncDocumentSource: skipped (empty html)");
+    return true;
+  }
 
   sessionInnerHtml = payloadHtml;
 
@@ -248,10 +315,15 @@ async function syncDocumentSource({ html = null, quiet = false } = {}) {
 
   currentDocumentSettings = result.document_settings || currentDocumentSettings;
   cachedPreviewHtml = decodeApiHtml(result, "preview_html");
-  if (result.edit_html) {
-    cachedEditHtml = decodeApiHtml(result, "edit_html");
+  const editHtmlFromSync = decodeApiHtml(result, "edit_html");
+  if (editHtmlFromSync?.trim()) {
+    cachedEditHtml = editHtmlFromSync;
   }
   rulesViewStale = true;
+  rulesEditorLog("syncDocumentSource ok", {
+    previewChars: cachedPreviewHtml?.length || 0,
+    editChars: cachedEditHtml?.length || 0,
+  });
   return true;
 }
 
@@ -290,7 +362,7 @@ function showWelcomePreview() {
   els.preview.innerHTML = emptyPreviewMarkup();
 }
 
-function setPreviewHtml(html) {
+function setPreviewHtml(html, { preserveScroll = false } = {}) {
   if (!html || !html.trim()) {
     els.preview.innerHTML = emptyPreviewMarkup({
       title: "Документ порожній",
@@ -299,10 +371,26 @@ function setPreviewHtml(html) {
     });
     return false;
   }
+  const scrollTop = preserveScroll ? els.preview.scrollTop : 0;
+  const scrollLeft = preserveScroll ? els.preview.scrollLeft : 0;
   els.preview.innerHTML = html;
-  els.preview.scrollTop = 0;
-  els.preview.scrollLeft = 0;
+  els.preview.scrollTop = preserveScroll ? scrollTop : 0;
+  els.preview.scrollLeft = preserveScroll ? scrollLeft : 0;
   return true;
+}
+
+function stripRulesEditorDecorationsFromPreview() {
+  if (!els.preview) return;
+  els.preview.classList.remove("is-assign-mode");
+  els.preview.querySelector(".docx-canvas")?.classList.remove("is-assign-mode");
+  els.preview.querySelectorAll("[data-block-id]").forEach((block) => {
+    block.classList.remove(
+      "docx-block--selected",
+      "docx-block--assign-target",
+      "docx-block--assign-hover",
+      "docx-block--scroll-flash",
+    );
+  });
 }
 
 function updateSearchClearButton() {
@@ -480,7 +568,7 @@ function endTabTransition() {
 }
 
 function captureTabScrollPositions(wasPreview, wasEdit) {
-  if (wasPreview && els.preview) {
+  if (els.preview && (wasPreview || wasEdit)) {
     savedPreviewScrollTop = els.preview.scrollTop;
   }
   if (wasEdit && els.rulesPanelScroll) {
@@ -533,35 +621,39 @@ async function setActiveTab(tab, options = {}) {
   }
 
   if (wasEdit && isPreview && rulesEditorLoaded && getRulesEditor()) {
+    const editor = getRulesEditor();
     currentDocumentSettings = {
       ...currentDocumentSettings,
-      document_model: getRulesEditor().getRules(),
-      variant_rules: getRulesEditor().getRules(),
-      has_configured_rules: getRulesEditor().hasConfiguredRules(),
-      active_condition_ids: getRulesEditor().getActiveConditionIds(),
+      document_model: editor.getRules(),
+      variant_rules: editor.getRules(),
+      has_configured_rules: editor.hasConfiguredRules(),
+      active_condition_ids: editor.getAllConditionFieldIds(),
     };
   }
 
   if (isPreview && isDocx) {
+    stripRulesEditorDecorationsFromPreview();
     getRulesEditor()?.deactivate?.();
   }
 
   updateConditionsPanel();
 
   if (isEdit && isDocx) {
+    ensureRulesEditorShell();
     const synced = await syncDocumentSource({ html: pendingSyncHtml, quiet: true });
     if (!synced) {
-      setStatus("Не вдалося синхронізувати зміни з документом", true);
-    } else {
-      const editHtml = cachedEditHtml;
-      cachedEditHtml = null;
-      const shouldSyncRulesBaseline = rulesViewStale;
-      if (!mountRulesEditor(editHtml, { syncRulesBaseline: shouldSyncRulesBaseline })) {
-        await loadEditView({ force: true });
-      }
+      rulesEditorLog("sync failed on edit tab — will still try get_edit_view");
+      setStatus("Синхронізація не вдалась, завантажую редактор правил…");
+    }
+    const loaded = await mountRulesEditorFromEditTab({
+      preserveNavigation: rulesEditorLoaded,
+      syncRulesBaseline: rulesViewStale,
+    });
+    if (!loaded) {
+      setStatus("Не вдалося завантажити редактор правил — див. термінал", true);
     }
   } else if (isPreview && isDocx && currentFileId && !skipPreviewReload) {
-    if (wasEdit) {
+    if (wasEdit || !isPreviewDisplayDom() || isStructureModeMarkup(cachedPreviewHtml)) {
       await persistRulesFromEditor({ quiet: true });
       await reloadPreviewFromServer();
     } else {
@@ -571,6 +663,7 @@ async function setActiveTab(tab, options = {}) {
 
   renderConditionsList();
   restoreTabScrollPositions(isPreview, isEdit);
+  updateWorkspaceStatus();
   endTabTransition();
 }
 
@@ -602,22 +695,34 @@ async function reloadPreviewFromServer() {
   }
   updateConditionsPanel();
   updateDocumentActions();
+  renderConditionsList();
+  syncConditionInputs();
+  updateWorkspaceStatus();
 }
 
 function restorePreviewFromCacheOrReload(wasEdit) {
-  const hasPreviewDoc = els.preview.querySelector(".docx-editable:not(.docx-structure-mode)");
+  if (cachedPreviewHtml && isStructureModeMarkup(cachedPreviewHtml)) {
+    cachedPreviewHtml = null;
+    rulesViewStale = true;
+  }
 
-  if (!rulesViewStale && cachedPreviewHtml?.trim()) {
+  const hasPreviewDoc = isPreviewDisplayDom();
+
+  if (!rulesViewStale && cachedPreviewHtml?.trim() && !isStructureModeMarkup(cachedPreviewHtml)) {
     setPreviewHtml(cachedPreviewHtml);
     if (typeof Editor !== "undefined") {
       Editor.setEnabled(true);
       Editor.prepareEditable?.();
     }
+    updateConditionsPanel();
+    renderConditionsList();
+    syncConditionInputs();
+    updateWorkspaceStatus();
     return;
   }
 
   if (wasEdit || rulesViewStale || !hasPreviewDoc) {
-    reloadPreview(sessionInnerHtml);
+    void reloadPreview(sessionInnerHtml);
     return;
   }
 
@@ -625,6 +730,7 @@ function restorePreviewFromCacheOrReload(wasEdit) {
     Editor.setEnabled(true);
     Editor.prepareEditable?.();
   }
+  updateWorkspaceStatus();
 }
 
 async function persistRulesFromEditor({ quiet = false } = {}) {
@@ -641,7 +747,8 @@ async function persistRulesFromEditor({ quiet = false } = {}) {
   }
 
   currentDocumentSettings = result.document_settings || currentDocumentSettings;
-  rulesViewStale = false;
+  rulesViewStale = true;
+  cachedPreviewHtml = null;
   Unsaved.syncRulesBaseline?.();
   return true;
 }
@@ -672,13 +779,18 @@ async function reloadPreview(sessionHtml = null) {
     return;
   }
   cachedPreviewHtml = decodeApiHtml(result, "preview_html");
+  sessionInnerHtml = cachedPreviewHtml;
+  rulesViewStale = false;
   if (typeof Editor !== "undefined") {
     Editor.setEnabled(true);
     Editor.prepareEditable?.();
   }
   updateConditionsPanel();
   renderConditionsList();
+  syncConditionInputs();
+  updateDocumentActions();
   updateEditTabState();
+  updateWorkspaceStatus();
 }
 
 function updateEditTabState() {
@@ -830,30 +942,29 @@ async function loadEditView({ force = false } = {}) {
 }
 
 async function refreshViewAfterConditionChange(result) {
+  currentDocumentSettings = result.document_settings || currentDocumentSettings;
+
   if (activeTab === "preview") {
     const html = decodeApiHtml(result, "preview_html");
-    setPreviewHtml(html);
+    setPreviewHtml(html, { preserveScroll: true });
     cachedPreviewHtml = html;
-    sessionInnerHtml = collectEditableHtml() || sessionInnerHtml;
+    sessionInnerHtml = collectEditableHtml() || html || sessionInnerHtml;
     if (typeof Editor !== "undefined") {
       Editor.setEnabled(true);
       Editor.prepareEditable?.();
     }
+    renderConditionsList();
     return;
   }
   if (activeTab === "edit") {
-    cachedEditHtml = null;
-    invalidatePreviewCache();
-    await loadEditView({ force: true });
+    renderConditionsList();
+    getRulesEditor()?.refreshConditionUi?.();
   }
 }
 
-function mountRulesEditor(editHtml, { syncRulesBaseline = false } = {}) {
-  if (!editHtml?.trim()) return false;
-  if (!setPreviewHtml(editHtml)) return false;
-
+function ensureRulesEditorShell() {
   const editor = getRulesEditor();
-  if (!editor) return false;
+  if (!editor || !els.rulesEditor) return null;
 
   editor.init({
     treeHost: els.nodeTreeHost,
@@ -863,45 +974,99 @@ function mountRulesEditor(editHtml, { syncRulesBaseline = false } = {}) {
     shellEl: els.rulesEditor,
     previewEl: els.preview,
     getIsActive: () => activeTab === "edit",
+    getConditionValues: () => getConditionValues(),
     statusFn: setStatus,
     onModelChange: syncPreviewConditionsFromEditor,
   });
-  editor.setModel(getInitialDocumentModel());
-  editor.render();
+  return editor;
+}
+
+function mountRulesEditor(editHtml, { syncRulesBaseline = false, preserveNavigation = false } = {}) {
+  const editor = ensureRulesEditorShell();
+  if (!editor) {
+    rulesEditorLog("mountRulesEditor: NodeEditor shell unavailable");
+    return false;
+  }
+
+  if (editHtml?.trim()) {
+    if (!setPreviewHtml(editHtml)) {
+      rulesEditorLog("mountRulesEditor: setPreviewHtml rejected html", { chars: editHtml.length });
+      return false;
+    }
+  } else if (!els.preview.querySelector("[data-block-id], .docx-document, .docx-editable")) {
+    rulesEditorLog("mountRulesEditor: no edit html and preview has no docx markers");
+    return false;
+  }
+
+  try {
+    editor.setModel(getInitialDocumentModel(), { preserveNavigation });
+    editor.render();
+    editor.refreshConditionUi?.();
+  } catch (error) {
+    rulesEditorLog("mountRulesEditor: render failed", { error: String(error) });
+    return false;
+  }
+
   rulesEditorLoaded = true;
   rulesViewStale = false;
-  setStatus("Створіть умову, розділ і варіанти в дереві");
+  if (activeTab === "edit") {
+    setStatus("Створіть умову, розділ і варіанти в дереві");
+  }
   if (syncRulesBaseline) Unsaved.syncRulesBaseline?.();
+  rulesEditorLog("mountRulesEditor ok", { preserveNavigation, htmlChars: editHtml?.length || 0 });
   return true;
 }
 
 async function loadEditViewImpl({ force = false } = {}) {
+  if (!currentFileId) {
+    rulesEditorLog("loadEditView: no currentFileId");
+    return;
+  }
+
   if (!force && rulesEditorLoaded && !rulesViewStale) {
+    rulesEditorLog("loadEditView: skip (already loaded)");
     return;
   }
 
   const syncRules = rulesViewStale;
 
-  if (!force && cachedEditHtml) {
+  if (!force && cachedEditHtml?.trim()) {
     const html = cachedEditHtml;
     cachedEditHtml = null;
+    rulesEditorLog("loadEditView: using cached edit html", { chars: html.length });
     if (mountRulesEditor(html, { syncRulesBaseline: syncRules })) {
       return;
     }
+    rulesEditorLog("loadEditView: cached html mount failed");
   }
 
   setStatus("Завантаження редактора правил…");
-  const result = await window.pywebview.api.get_edit_view(currentFileId);
+  rulesEditorLog("loadEditView: calling get_edit_view", { fileId: currentFileId, force });
+  let result;
+  try {
+    result = await window.pywebview.api.get_edit_view(currentFileId);
+  } catch (error) {
+    rulesEditorLog("loadEditView: API threw", { error: String(error) });
+    setStatus(`Помилка API редактора правил: ${error.message || error}`, true);
+    return;
+  }
+
   if (!result.ok) {
-    setStatus(result.error, true);
+    rulesEditorLog("loadEditView: API error", { error: result.error });
+    setStatus(result.error || "Не вдалося завантажити редактор правил", true);
     return;
   }
 
   currentDocumentSettings = result.document_settings || currentDocumentSettings;
   const editHtml = decodeApiHtml(result, "edit_html");
+  rulesEditorLog("loadEditView: received edit html", {
+    chars: editHtml?.length || 0,
+    hasStructureMode: isStructureModeMarkup(editHtml),
+  });
   cachedEditHtml = editHtml;
   if (!mountRulesEditor(editHtml, { syncRulesBaseline: syncRules })) {
-    setStatus("Не вдалося завантажити документ для правил", true);
+    rulesEditorLog("loadEditView: mount failed after API");
+    setStatus("Не вдалося відобразити документ для правил — див. термінал", true);
   }
 }
 
@@ -925,7 +1090,7 @@ async function handleSaveRules() {
   } else {
     invalidatePreviewCache();
   }
-  editor.setModel(getInitialDocumentModel());
+  editor.setModel(getInitialDocumentModel(), { preserveNavigation: true });
   editor.render();
   invalidatePreviewCache();
   rulesViewStale = true;
@@ -936,12 +1101,47 @@ async function handleSaveRules() {
 }
 
 async function ensureRulesEditorReady() {
-  if (!currentFileId || currentExtension !== ".docx") return false;
-  if (activeTab !== "edit") return false;
-  if (!rulesEditorLoaded) {
-    await loadEditView();
+  if (!currentFileId || currentExtension !== ".docx") {
+    rulesEditorLog("ensureRulesEditorReady: not a docx file", {
+      currentFileId,
+      currentExtension,
+    });
+    return false;
   }
+  if (activeTab !== "edit") {
+    rulesEditorLog("ensureRulesEditorReady: not on edit tab", { activeTab });
+    return false;
+  }
+
+  ensureRulesEditorShell();
+
+  if (!rulesEditorLoaded || rulesViewStale) {
+    await loadEditView({ force: !rulesEditorLoaded || rulesViewStale });
+  }
+  if (!rulesEditorLoaded) {
+    rulesEditorLog("ensureRulesEditorReady: retry with force");
+    await loadEditView({ force: true });
+  }
+
+  rulesEditorLog("ensureRulesEditorReady", { loaded: rulesEditorLoaded });
   return rulesEditorLoaded;
+}
+
+async function handleRulesPageNav(pageId) {
+  if (!currentFileId || currentExtension !== ".docx") {
+    setStatus("Спочатку відкрийте DOCX-документ", true);
+    return;
+  }
+  if (activeTab !== "edit") {
+    await setActiveTab("edit");
+  }
+  if (!(await ensureRulesEditorReady())) {
+    setStatus("Не вдалося завантажити редактор правил", true);
+    return;
+  }
+  const editor = getRulesEditor();
+  editor?.goToRulesPage?.(pageId);
+  editor?.render?.();
 }
 
 async function handleAddCondition() {
@@ -951,16 +1151,21 @@ async function handleAddCondition() {
   }
 
   if (activeTab !== "edit") {
-    void setActiveTab("edit");
+    await setActiveTab("edit");
   }
-  await ensureRulesEditorReady();
-
-  if (!rulesEditorLoaded || !getRulesEditor()?.addFieldAsync) {
+  if (!(await ensureRulesEditorReady())) {
     setStatus("Не вдалося завантажити редактор правил", true);
     return;
   }
 
-  await getRulesEditor().addFieldAsync();
+  const editor = getRulesEditor();
+  if (!editor?.addFieldAsync) {
+    setStatus("Не вдалося завантажити редактор правил", true);
+    return;
+  }
+
+  editor.goToFieldsPage?.();
+  await editor.addFieldAsync();
 }
 
 async function handleAddRule() {
@@ -970,7 +1175,7 @@ async function handleAddRule() {
   }
 
   if (activeTab !== "edit") {
-    void setActiveTab("edit");
+    await setActiveTab("edit");
     await ensureRulesEditorReady();
   } else if (!rulesEditorLoaded) {
     await ensureRulesEditorReady();
@@ -1126,10 +1331,11 @@ function documentNeedsApproval() {
 }
 
 function allActiveConditionsChosen() {
-  const { activeIds } = getPreviewConditionsContext();
-  if (!activeIds.length) return false;
-  const values = getConditionValues();
-  return activeIds.every((id) => values[id] !== undefined && values[id] !== null);
+  const ctx = getPreviewConditionsContext();
+  const requiredIds = ctx.allFieldIds?.length ? ctx.allFieldIds : ctx.activeIds;
+  if (!requiredIds.length) return false;
+  const values = ctx.conditionValues || getConditionValues();
+  return requiredIds.every((id) => values[id] !== undefined && values[id] !== null);
 }
 
 function updateDocumentActions() {
@@ -1217,11 +1423,15 @@ function getEffectiveVariantRules() {
 function getPreviewConditionsContext() {
   const variantRules = getEffectiveVariantRules();
   const editor = getRulesEditor();
-  const activeIds =
-    rulesEditorLoaded && editor?.getActiveConditionIds
-      ? editor.getActiveConditionIds()
-      : (currentDocumentSettings.active_condition_ids ||
-          getActiveConditionIdsFromRules(variantRules));
+  const conditionValues = getConditionValues();
+  const allFieldIds =
+    rulesEditorLoaded && editor?.getAllConditionFieldIds
+      ? editor.getAllConditionFieldIds()
+      : currentDocumentSettings.active_condition_ids?.length
+        ? currentDocumentSettings.active_condition_ids
+        : getActiveConditionIdsFromRules(variantRules);
+
+  const activeIds = allFieldIds;
 
   const hasConfigured =
     rulesEditorLoaded && editor?.hasConfiguredRules
@@ -1230,8 +1440,9 @@ function getPreviewConditionsContext() {
 
   let conditions = [];
   if (isV5RulesModel(variantRules)) {
+    const idSet = new Set(activeIds);
     conditions = (variantRules.fields || [])
-      .filter((field) => activeIds.includes(field.id))
+      .filter((field) => idSet.has(field.id))
       .map((field) => ({
         id: field.id,
         label: field.label,
@@ -1244,7 +1455,7 @@ function getPreviewConditionsContext() {
     );
   }
 
-  return { variantRules, activeIds, hasConfigured, conditions };
+  return { variantRules, activeIds, allFieldIds, hasConfigured, conditions, conditionValues };
 }
 
 function getActiveConditionIdsFromRules(variantRules) {
@@ -1278,15 +1489,30 @@ function syncPreviewConditionsFromEditor() {
     document_model: model,
     variant_rules: model,
     has_configured_rules: editor.hasConfiguredRules(),
-    active_condition_ids: editor.getActiveConditionIds(),
+    active_condition_ids: editor.getAllConditionFieldIds(),
   };
   updateConditionsPanel();
   renderConditionsList();
+  editor.refreshConditionUi?.();
   updateDocumentActions();
 }
 
 function getActiveConditionIds() {
   return getPreviewConditionsContext().activeIds;
+}
+
+function hasAnyConditionChoice() {
+  const values = getConditionValues();
+  return Object.values(values).some((value) => value !== undefined && value !== null);
+}
+
+function renderConditionsPreviewLegend() {
+  if (!hasAnyConditionChoice()) return "";
+  return `
+    <div class="conditions-preview-legend" role="note">
+      <span class="conditions-preview-legend-item conditions-preview-legend-item--keep">Залишиться у документі</span>
+      <span class="conditions-preview-legend-item conditions-preview-legend-item--drop">Буде видалено</span>
+    </div>`;
 }
 
 function renderBooleanConditionCard(condition, index) {
@@ -1352,10 +1578,11 @@ function renderConditionsList() {
       ? '<p class="rules-empty rules-empty--soft conditions-setup-hint">Документ затверджено — можна експортувати.</p>'
       : currentDocumentSettings.approval_pending
         ? '<p class="rules-empty rules-empty--soft conditions-setup-hint">Перегляд без інструкцій. Натисніть «Підтвердити» або «Ні», щоб повернутися.</p>'
-        : '<p class="rules-empty rules-empty--soft conditions-setup-hint">Оберіть Так/Ні — активний варіант підсвітиться, неактивний стане сірим. Потім «Затвердити».</p>';
+        : '<p class="rules-empty rules-empty--soft conditions-setup-hint">Оберіть Так/Ні — зеленим позначено текст, що збережеться; закресленим червоним — що буде видалено.</p>';
 
   els.conditionsList.innerHTML =
     hint +
+    renderConditionsPreviewLegend() +
     conditions
     .map((condition, index) => {
       if (condition.type === "choice" || (condition.options?.length > 2)) {
@@ -1385,6 +1612,7 @@ function renderConditionsList() {
     input.disabled = lockConditions;
   });
 
+  updateConditionsPanel();
   updateDocumentActions();
 }
 
@@ -1463,11 +1691,6 @@ async function handleConditionValueClear(conditionId) {
   try {
     setStatus("Скидання умови…");
 
-    if (!(await persistRulesFromEditor({ quiet: true }))) {
-      syncConditionInputs();
-      return;
-    }
-
     const rules = getEffectiveVariantRules();
     const result = await window.pywebview.api.clear_condition_setting(
       currentFileId,
@@ -1485,9 +1708,10 @@ async function handleConditionValueClear(conditionId) {
     currentDocumentSettings = result.document_settings || currentDocumentSettings;
     rulesViewStale = true;
     invalidatePreviewCache();
+    Unsaved.syncRulesBaseline?.();
 
-    if (rulesEditorLoaded) {
-      getRulesEditor()?.setModel(getInitialDocumentModel());
+    if (rulesEditorLoaded && activeTab === "edit") {
+      getRulesEditor()?.setModel(getInitialDocumentModel(), { preserveNavigation: true });
       getRulesEditor()?.render();
       rulesViewStale = false;
     }
@@ -1524,11 +1748,6 @@ async function handleConditionValueChange(conditionId, value) {
   try {
     setStatus(`Застосування: ${jobLabel}…`);
 
-    if (!(await persistRulesFromEditor({ quiet: true }))) {
-      syncConditionInputs();
-      return;
-    }
-
     const rules = getEffectiveVariantRules();
     const result = await window.pywebview.api.apply_condition_setting(
       currentFileId,
@@ -1547,9 +1766,10 @@ async function handleConditionValueChange(conditionId, value) {
     currentDocumentSettings = result.document_settings || currentDocumentSettings;
     rulesViewStale = true;
     invalidatePreviewCache();
+    Unsaved.syncRulesBaseline?.();
 
-    if (rulesEditorLoaded) {
-      getRulesEditor()?.setModel(getInitialDocumentModel());
+    if (rulesEditorLoaded && activeTab === "edit") {
+      getRulesEditor()?.setModel(getInitialDocumentModel(), { preserveNavigation: true });
       getRulesEditor()?.render();
       rulesViewStale = false;
     }
@@ -1573,10 +1793,12 @@ async function handleConditionValueChange(conditionId, value) {
 }
 
 function updateConditionsPanel() {
-  const { activeIds } = getPreviewConditionsContext();
-  const showOnPreview = activeTab === "preview" && activeIds.length > 0;
+  const { activeIds, allFieldIds } = getPreviewConditionsContext();
+  const showOnPreview = activeTab === "preview" && (activeIds.length > 0 || allFieldIds?.length > 0);
 
   els.previewPanel?.classList.toggle("has-conditions", showOnPreview);
+  els.previewPanel?.classList.toggle("has-condition-preview", showOnPreview && hasAnyConditionChoice());
+  els.previewPanel?.classList.remove("is-result-ready");
   if (els.conditionsPanel) {
     els.conditionsPanel.setAttribute("aria-hidden", String(!showOnPreview));
   }
@@ -1703,7 +1925,7 @@ async function applyWorkflowResult(result, statusMessage) {
   invalidatePreviewCache();
 
   if (rulesEditorLoaded) {
-    getRulesEditor()?.setModel(getInitialDocumentModel());
+    getRulesEditor()?.setModel(getInitialDocumentModel(), { preserveNavigation: true });
     getRulesEditor()?.render();
     rulesViewStale = false;
   }
@@ -1926,7 +2148,21 @@ function bindEvents() {
   els.saveRulesBtn?.addEventListener("click", handleSaveRules);
   els.redetectRulesBtn?.addEventListener("click", handleRedetectRules);
   els.rulesPanelBack?.addEventListener("click", () => getRulesEditor()?.backToStructure());
-  els.addConditionBtn?.addEventListener("click", handleAddCondition);
+
+  els.rulesEditor?.addEventListener("click", (event) => {
+    const tab = event.target.closest(".rules-segment-nav-item[data-rules-page]");
+    if (!tab) return;
+    const pageId = tab.dataset.rulesPage;
+    if (!pageId || pageId === "editor") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void handleRulesPageNav(pageId);
+  });
+
+  els.addConditionBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    void handleAddCondition();
+  });
   els.sidebarToggle?.addEventListener("click", toggleSidebar);
   els.sidebarExpand?.addEventListener("click", toggleSidebar);
 

@@ -328,7 +328,7 @@
   display: flex
   flex-direction: column
   gap: 0
-  padding: $space-2
+  padding: $space-2 $space-3
   min-height: 44px
   justify-content: center
   border-bottom: 1px solid $border
@@ -342,13 +342,45 @@
 .conditions-panel-sub
   display: none
 
+.conditions-preview-legend
+  display: flex
+  flex-direction: column
+  gap: 6px
+  margin-bottom: $space-2
+  padding: $space-2
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: $bg-panel
+
+.conditions-preview-legend-item
+  display: flex
+  align-items: center
+  gap: 8px
+  font: var(--weight-medium) var(--text-caption)/var(--leading-tight) $font
+  color: $text-secondary
+
+  &::before
+    content: ""
+    flex-shrink: 0
+    width: 10px
+    height: 10px
+    border-radius: 2px
+
+  &--keep::before
+    background: color-mix(in srgb, $accent 35%, transparent)
+    box-shadow: inset 0 0 0 2px $accent
+
+  &--drop::before
+    background: color-mix(in srgb, #c0392b 20%, transparent)
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, #c0392b 65%, transparent)
+
 .conditions-list
   display: flex
   flex-direction: column
   gap: $space-1
   overflow-y: auto
   min-height: 0
-  padding: $space-2
+  padding: $space-2 $space-3 $space-3
 
 .condition-card
   display: flex
@@ -527,16 +559,12 @@ body.is-resizing-rules-panel
 
 // (legacy list-based rules tree removed — see _tree-view.sass)
 
-.docx-structure-mode [data-block-id]
-  cursor: pointer
-  transition: background .15s ease, opacity .15s ease
-
 @mixin docx-variant-block-highlight($accent-color, $bg-mix: 8%)
   position: relative
   box-shadow: none
   outline: none
   border-radius: 0
-  padding-left: 10px
+  padding: 14px 72px 6px 10px
   margin-left: 0
   background: color-mix(in srgb, $accent-color $bg-mix, transparent)
 
@@ -550,47 +578,113 @@ body.is-resizing-rules-panel
     background: $accent-color
     border-radius: 1px
 
-.docx-block--content-active
-  @include docx-variant-block-highlight($accent, 10%)
+// Rules editor — block outlines / assign mode (only on «Правила» tab)
+.preview-panel.is-edit
+  .docx-structure-mode [data-block-id]
+    cursor: pointer
+    transition: background .15s ease, opacity .15s ease
 
-.docx-block--content-inactive
-  @include docx-variant-block-highlight($text-muted, 0%)
-  opacity: .52
-  color: color-mix(in srgb, var(--doc-text, $text) 58%, $text-muted)
+  .docx-block--assign-target
+    outline: 1px dashed color-mix(in srgb, $accent 55%, transparent)
+    outline-offset: 2px
+    cursor: pointer
 
-  &::before
-    background: color-mix(in srgb, $text-muted 45%, transparent)
-    width: 2px
+  .docx-block--assign-hover
+    outline: 2px solid color-mix(in srgb, $accent 80%, transparent) !important
+    outline-offset: 2px
+    background: color-mix(in srgb, $accent 10%, transparent) !important
 
-  &.docx-instruction,
-  .docx-instruction-text
-    opacity: 1
+  .docx-canvas.is-assign-mode [data-block-id]
+    cursor: pointer
+
+  .docx-canvas.is-assign-mode td [data-block-id],
+  .docx-canvas.is-assign-mode th [data-block-id]
+    position: relative
+
+  .docx-canvas.is-assign-mode td [data-block-id]::before,
+  .docx-canvas.is-assign-mode th [data-block-id]::before
+    content: attr(data-block-id)
+    position: absolute
+    top: 0
+    right: 0
+    padding: 1px 4px
+    font-size: 9px
+    line-height: 1.2
     font-style: normal
-    border-left: none
-    padding-left: 0
-    color: inherit
+    font-weight: 600
+    letter-spacing: 0.02em
+    color: $accent
+    background: color-mix(in srgb, $surface 88%, $accent 12%)
+    border: 1px solid color-mix(in srgb, $accent 35%, transparent)
+    border-radius: 3px
+    pointer-events: none
+    z-index: 2
 
-.docx-block--content-active + .docx-block--content-active,
-.docx-block--content-inactive + .docx-block--content-inactive
-  margin-top: -1px
+  .docx-block--selected
+    outline: 2px solid $accent !important
+    outline-offset: 3px
 
-  &::before
-    border-radius: 0
+  .docx-block--scroll-flash
+    animation: docx-scroll-flash 1.2s ease-out
+    outline: 2px solid color-mix(in srgb, $accent 70%, white) !important
+    outline-offset: 4px
+    background: color-mix(in srgb, $accent 12%, transparent) !important
 
-.docx-block--assign-target
-  outline: 1px dashed color-mix(in srgb, $accent 55%, transparent)
-  outline-offset: 2px
-  cursor: pointer
+// Preview — condition overlay (Tak/Ni), not on rules tab
+.preview-panel.has-condition-preview:not(.is-edit)
+  .docx-block--content-active
+    @include docx-variant-block-highlight($accent, 12%)
 
-.docx-block--selected
-  outline: 2px solid $accent !important
-  outline-offset: 3px
+    &::after
+      content: "Залишиться"
+      position: absolute
+      top: 2px
+      right: 4px
+      font: var(--weight-medium) 10px/1 $font
+      letter-spacing: 0.02em
+      text-transform: uppercase
+      color: $accent
+      opacity: 0.85
+      pointer-events: none
 
-.docx-block--scroll-flash
-  animation: docx-scroll-flash 1.2s ease-out
-  outline: 2px solid color-mix(in srgb, $accent 70%, white) !important
-  outline-offset: 4px
-  background: color-mix(in srgb, $accent 12%, transparent) !important
+  .docx-block--content-inactive
+    @include docx-variant-block-highlight(#c0392b, 5%)
+    opacity: .72
+    color: color-mix(in srgb, var(--doc-text, $text) 52%, $text-muted)
+    text-decoration: line-through
+    text-decoration-color: color-mix(in srgb, #c0392b 55%, transparent)
+    text-decoration-thickness: 1px
+
+    &::before
+      background: color-mix(in srgb, #c0392b 70%, transparent)
+      width: 3px
+
+    &::after
+      content: "Видалиться"
+      position: absolute
+      top: 2px
+      right: 4px
+      font: var(--weight-medium) 10px/1 $font
+      letter-spacing: 0.02em
+      text-transform: uppercase
+      color: color-mix(in srgb, #c0392b 85%, $text-muted)
+      opacity: 0.9
+      pointer-events: none
+
+    &.docx-instruction,
+    .docx-instruction-text
+      opacity: 1
+      font-style: normal
+      border-left: none
+      padding-left: 0
+      color: inherit
+
+  .docx-block--content-active + .docx-block--content-active,
+  .docx-block--content-inactive + .docx-block--content-inactive
+    margin-top: -1px
+
+    &::before
+      border-radius: 0
 
 @keyframes docx-scroll-flash
   0%

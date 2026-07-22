@@ -1,4 +1,5 @@
 import base64
+import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +10,8 @@ from docflow_docx.structure import get_active_condition_ids, has_configured_rule
 from repositories.file_store import FileStore
 from repositories.manifest import ManifestRepository
 from services import document_service
+
+_log = logging.getLogger("docflow.files")
 
 _manifest = ManifestRepository()
 _files = FileStore()
@@ -242,11 +245,14 @@ def get_edit_view(file_id: str, html_b64: str | None = None) -> dict:
         raise ValueError("Редагування правил доступне лише для DOCX")
 
     path = _require_path(entry)
+    _log.debug("get_edit_view path=%s from_html=%s", path, bool(html_b64))
     if html_b64:
         html = base64.b64decode(html_b64).decode("utf-8")
         edit_html, meta = document_service.build_edit_view_from_html(path, html)
     else:
         edit_html, meta = document_service.build_edit_view(path)
+    if not (edit_html or "").strip():
+        _log.warning("get_edit_view returned empty edit_html for %s", file_id)
     return {"edit_html": edit_html, "document_settings": meta}
 
 

@@ -132,6 +132,14 @@ def _coerce_rules(rules: dict | None) -> dict:
     return normalize_rules(rules)
 
 
+def _resolve_ctx_rules(ctx: dict, rules: dict | None = None) -> dict:
+    if rules is not None:
+        return _coerce_rules(rules)
+    if _is_v5_model(ctx["rules"]):
+        return ctx["rules"]
+    return normalize_rules(ctx["rules"])
+
+
 def _persist_rules(path: Path, rules: dict) -> dict:
     rules = _coerce_rules(rules)
     if _is_v5_model(rules):
@@ -245,29 +253,26 @@ def build_preview(path: Path, extension: str, name: str) -> tuple[str | None, st
             ctx["rules"] = normalize_rules(ctx["rules"])
             save_variant_rules(path, ctx["rules"])
 
-        open_settings = dict(ctx["settings"])
-        open_settings.pop("is_bank_employee", None)
-        open_settings["approved"] = False
-        open_settings["approval_pending"] = False
-        open_settings.pop("approved_at", None)
+        settings = dict(ctx["settings"])
+        settings.pop("is_bank_employee", None)
 
         display_html = _build_preview_display_html(
             ctx["source_html"],
             ctx["rules"],
-            open_settings,
+            settings,
         )
 
         save_edit_html(
             path,
             display_html,
             source_html=ctx["source_html"],
-            settings=open_settings,
+            settings=settings,
             variant_rules=ctx["rules"],
         )
         save_draft_source_html(path, ctx["source_html"])
 
         preview = make_editable(display_html)
-        settings = _document_settings({**ctx, "settings": open_settings})
+        settings = _document_settings({**ctx, "settings": settings})
         return None, preview, settings
 
     if extension == ".pdf":
@@ -375,21 +380,17 @@ def _session_source_html(
 
 
 def _build_edit_view_from_source(ctx: dict) -> tuple[str, dict]:
-    condition_values = _condition_values_from_settings(ctx["settings"])
     rules = ctx["rules"]
 
     if _is_v5_model(rules):
-        marked_html = apply_document_model(
-            ctx["source_html"],
-            rules,
-            condition_values=condition_values,
-            finalize=_should_finalize_preview(
-                rules, condition_values, ctx["settings"]
-            ),
-        )
-        return make_structure_editable(marked_html), _document_settings(ctx)
+        # Rules editor: full source for block assignment — no condition overlay.
+        html = annotate_blocks(ctx["source_html"])
+        return make_structure_editable(html), _document_settings(ctx)
 
-    highlights = get_highlight_map(rules, condition_values=condition_values)
+    highlights = get_highlight_map(
+        rules,
+        condition_values=_condition_values_from_settings(ctx["settings"]),
+    )
     marked_html = apply_highlights(ctx["source_html"], highlights)
     return make_structure_editable(marked_html), _document_settings(ctx)
 
@@ -434,12 +435,7 @@ def apply_document_setting(
     all_condition_values: dict | None = None,
 ) -> tuple[str, dict]:
     ctx = _load_docx_context(path)
-    if rules is not None:
-        ctx["rules"] = _persist_rules(path, rules)
-    elif _is_v5_model(ctx["rules"]):
-        ctx["rules"] = _persist_rules(path, ctx["rules"])
-    else:
-        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
+    ctx["rules"] = _resolve_ctx_rules(ctx, rules)
 
     if all_condition_values is not None:
         condition_values = {
@@ -480,12 +476,7 @@ def clear_document_setting(
     all_condition_values: dict | None = None,
 ) -> tuple[str, dict]:
     ctx = _load_docx_context(path)
-    if rules is not None:
-        ctx["rules"] = _persist_rules(path, rules)
-    elif _is_v5_model(ctx["rules"]):
-        ctx["rules"] = _persist_rules(path, ctx["rules"])
-    else:
-        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
+    ctx["rules"] = _resolve_ctx_rules(ctx, rules)
 
     if all_condition_values is not None:
         condition_values = {
@@ -521,12 +512,7 @@ def preview_approval_document(
     all_condition_values: dict | None = None,
 ) -> tuple[str, dict]:
     ctx = _load_docx_context(path)
-    if rules is not None:
-        ctx["rules"] = _persist_rules(path, rules)
-    elif _is_v5_model(ctx["rules"]):
-        ctx["rules"] = _persist_rules(path, ctx["rules"])
-    else:
-        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
+    ctx["rules"] = _resolve_ctx_rules(ctx, rules)
 
     if all_condition_values is not None:
         condition_values = {
@@ -591,12 +577,7 @@ def cancel_approval_preview(
     if not ctx["settings"].get("approval_pending"):
         raise ValueError("Немає перегляду для скасування")
 
-    if rules is not None:
-        ctx["rules"] = _persist_rules(path, rules)
-    elif _is_v5_model(ctx["rules"]):
-        ctx["rules"] = _persist_rules(path, ctx["rules"])
-    else:
-        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
+    ctx["rules"] = _resolve_ctx_rules(ctx, rules)
 
     draft_source = load_draft_source_html(path) or ctx["source_html"]
 
@@ -640,12 +621,7 @@ def approve_document(
     all_condition_values: dict | None = None,
 ) -> tuple[str, dict]:
     ctx = _load_docx_context(path)
-    if rules is not None:
-        ctx["rules"] = _persist_rules(path, rules)
-    elif _is_v5_model(ctx["rules"]):
-        ctx["rules"] = _persist_rules(path, ctx["rules"])
-    else:
-        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
+    ctx["rules"] = _resolve_ctx_rules(ctx, rules)
 
     if all_condition_values is not None:
         condition_values = {
@@ -717,12 +693,7 @@ def revert_document_approval(
     if not ctx["settings"].get("approved"):
         raise ValueError("Документ ще не затверджено")
 
-    if rules is not None:
-        ctx["rules"] = _persist_rules(path, rules)
-    elif _is_v5_model(ctx["rules"]):
-        ctx["rules"] = _persist_rules(path, ctx["rules"])
-    else:
-        ctx["rules"] = _persist_rules(path, normalize_rules(ctx["rules"]))
+    ctx["rules"] = _resolve_ctx_rules(ctx, rules)
 
     draft_source = load_draft_source_html(path)
     if not draft_source:
@@ -812,20 +783,22 @@ def save_rules_and_refresh(path: Path, rules: dict) -> tuple[str, dict]:
     ctx = _load_docx_context(path)
 
     if _is_v5_model(rules):
-        save_document_model(path, rules)
         ctx["rules"] = rules
-        marked_html = ctx["source_html"]
+        display_html = _build_preview_display_html(
+            ctx["source_html"],
+            rules,
+            ctx["settings"],
+        )
         save_edit_html(
             path,
-            make_structure_editable(marked_html),
+            display_html,
             source_html=ctx["source_html"],
             settings=ctx["settings"],
+            variant_rules=rules,
         )
-        return make_structure_editable(marked_html), _document_settings(ctx)
+        return make_structure_editable(ctx["source_html"]), _document_settings(ctx)
 
     rules = normalize_rules(rules)
-
-    save_variant_rules(path, rules)
     ctx["rules"] = rules
 
     display_html = _resolve_preview_html(

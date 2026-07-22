@@ -201,6 +201,111 @@
   text-transform: none
   letter-spacing: 0
 
+.rules-variant-nav
+  margin: 0 $space-2 $space-2
+  padding: $space-2
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: $bg-panel
+
+.rules-variant-nav-head
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: $space-2
+  margin-bottom: $space-2
+
+.rules-variant-nav-label
+  margin: 0
+  font: var(--weight-semibold) var(--text-body-sm)/var(--leading-tight) $font
+  color: $text
+
+.rules-variant-nav-actions
+  display: flex
+  align-items: center
+  gap: $space-1
+  flex-wrap: wrap
+  justify-content: flex-end
+
+.rules-variant-nav-foot
+  margin: $space-2 0 0
+  padding-top: $space-2
+  border-top: 1px solid $border
+
+.rules-variant-nav-field
+  margin: 0
+
+  .node-field-label
+    font: var(--weight-medium) var(--text-caption)/var(--leading-tight) $font
+    color: $text-secondary
+
+  .node-input
+    width: 100%
+    max-width: none
+
+.rules-variant-nav-foot-label
+  color: $text-muted
+
+.rules-variant-nav .rules-context-tabs
+  gap: $space-2
+  padding: 0
+  min-height: 0
+
+.rules-variant-nav .rules-context-tab
+  flex: 1 1 0
+  min-width: 120px
+  height: auto
+  min-height: 52px
+  padding: $space-2
+  flex-direction: column
+  align-items: flex-start
+  gap: 2px
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: $bg-input
+  align-self: stretch
+
+  &:hover
+    border-color: $text-muted
+    background: $bg-hover
+
+  &.is-active
+    border-color: $accent
+    background: $accent-subtle
+    font-weight: var(--weight-semibold)
+
+  &--yes.is-active
+    border-color: var(--branch-yes)
+    background: var(--branch-yes-subtle)
+
+  &--no.is-active
+    border-color: var(--branch-no)
+    background: var(--branch-no-subtle)
+
+.rules-context-tab-blocks
+  font: var(--weight-regular) 10px/1.2 $font
+  color: $text-muted
+
+.rules-variant-nav--setup .node-variants-panel
+  margin: 0
+
+.rules-variant-nav--setup .node-variant-quick-btn
+  &--yes
+    border-color: var(--branch-yes)
+    background: var(--branch-yes-subtle)
+
+    &:hover
+      border-color: var(--branch-yes)
+      background: rgba(63, 185, 80, 0.22)
+
+  &--choice
+    border-color: $accent
+    background: $accent-subtle
+
+    &:hover
+      border-color: $accent
+      background: rgba(76, 175, 80, 0.2)
+
 .node-zone-empty,
 .node-tree-empty,
 .node-inspector-empty-state
@@ -322,7 +427,14 @@
   padding: $space-2
 
 .node-inspector-card-head
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: $space-2
   margin-bottom: $space-2
+
+.node-inspector-card-actions
+  flex-shrink: 0
 
 .node-inspector-card-title
   margin: 0
@@ -495,6 +607,21 @@
   padding: 0
   border: none
   background: transparent
+
+.node-exclusive-structure-head
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: $space-2
+  margin-bottom: $space-2
+
+  .node-exclusive-structure-heading
+    display: block
+    margin: 0
+    font: var(--weight-semibold) var(--text-caption)/var(--leading-tight) $font
+    color: $text-secondary
+    text-transform: uppercase
+    letter-spacing: 0.03em
 
 .node-exclusive-structure-heading
   display: none
@@ -794,10 +921,11 @@
   all: unset
   flex: 1
   display: flex
-  flex-direction: column
-  justify-content: center
-  align-items: flex-start
-  gap: 2px
+  flex-direction: row
+  flex-wrap: wrap
+  align-items: center
+  justify-content: flex-start
+  gap: $space-2
   min-width: 0
   min-height: 48px
   padding: $space-2 $space-3
@@ -810,10 +938,20 @@
 .logic-field-card-title
   font: var(--weight-semibold) var(--text-body)/var(--leading-tight) $font
   color: $text
+  flex: 1 1 auto
+  min-width: 0
 
 .logic-field-card-meta
   font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
   color: $text-muted
+
+.logic-field-card-preview
+  font: var(--weight-medium) var(--text-caption)/var(--leading-tight) $font
+  color: $accent
+  padding: 2px 8px
+  border-radius: $radius-sm
+  background: color-mix(in srgb, $accent 12%, transparent)
+  flex-shrink: 0
 
 .logic-field-card-actions
   display: flex

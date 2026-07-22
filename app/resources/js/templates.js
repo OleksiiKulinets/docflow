@@ -285,6 +285,60 @@ const NodeTemplates = (() => {
     return section;
   }
 
+  function listVariantGroupBranches(model, forkId) {
+    return NodeModel.orderedChildren(model, forkId).filter(
+      (child) => child.type === "section" && child.condition?.type === "predicate",
+    );
+  }
+
+  function retargetVariantGroupField(model, forkId, newFieldId) {
+    const branches = listVariantGroupBranches(model, forkId);
+    if (!branches.length) return { error: "no_branches" };
+
+    const oldFieldId = branches[0].condition?.condition_id;
+    if (oldFieldId === newFieldId) return { ok: true, changed: false };
+
+    const oldField = oldFieldId ? NodeModel.getField(model, oldFieldId) : null;
+    const newField = NodeModel.getField(model, newFieldId);
+    if (!newField) return { error: "field_not_found" };
+    if (oldField && oldField.type !== newField.type) return { error: "type_mismatch" };
+
+    if (newField.type === "boolean") {
+      branches.forEach((branch) => {
+        const value = branch.condition?.value === false ? false : true;
+        NodeModel.updateNodeProperty(model, branch.id, "condition", {
+          type: "predicate",
+          condition_id: newFieldId,
+          operator: "eq",
+          value,
+        });
+      });
+    } else if (newField.type === "choice") {
+      const options = newField.options || [];
+      branches.forEach((branch, index) => {
+        const oldValue = branch.condition?.value;
+        let newValue = options.find((opt) => String(opt.value) === String(oldValue))?.value;
+        if (newValue === undefined) {
+          newValue = options[index]?.value ?? options[0]?.value;
+        }
+        const opt = options.find((item) => String(item.value) === String(newValue));
+        NodeModel.updateNodeProperty(model, branch.id, "condition", {
+          type: "predicate",
+          condition_id: newFieldId,
+          operator: "eq",
+          value: newValue,
+        });
+        if (opt?.label) {
+          NodeModel.updateNodeProperty(model, branch.id, "metadata.label", opt.label);
+        }
+      });
+    } else {
+      return { error: "unsupported_field_type" };
+    }
+
+    return { ok: true, changed: true, field: newField };
+  }
+
   function runSelfTests() {
     const errors = [];
     const assert = (name, ok) => {
@@ -342,6 +396,30 @@ const NodeTemplates = (() => {
     assert("marker fork validate", NodeModel.validateModel(model).length === 0);
 
     model = NodeModel.emptyModel();
+    const fieldA = NodeModel.addField(
+      model,
+      NodeModel.createField({ type: "boolean", label: "Field A" }),
+    );
+    const fieldB = NodeModel.addField(
+      model,
+      NodeModel.createField({ type: "boolean", label: "Field B" }),
+    );
+    const retargetSection = createSectionTemplate(model, { label: "Retarget" });
+    const retargetFork = createYesNoTemplate(model, {
+      parentId: retargetSection.id,
+      fieldId: fieldA.id,
+    });
+    assert("retarget yes/no fork", retargetFork && NodeModel.isExclusiveSection(retargetFork));
+    const retargetResult = retargetVariantGroupField(model, retargetFork.id, fieldB.id);
+    assert("retarget variant field", retargetResult.ok && retargetResult.changed);
+    const retargetBranches = listVariantGroupBranches(model, retargetFork.id);
+    assert(
+      "retarget updates all branches",
+      retargetBranches.every((branch) => branch.condition?.condition_id === fieldB.id),
+    );
+    assert("retarget validate", NodeModel.validateModel(model).length === 0);
+
+    model = NodeModel.emptyModel();
     const payField = NodeModel.addField(
       model,
       NodeModel.createField({
@@ -379,6 +457,8 @@ const NodeTemplates = (() => {
     createYesNoTemplate,
     ensureMarkerFork,
     addChoiceBranchToFork,
+    listVariantGroupBranches,
+    retargetVariantGroupField,
     assertNoLegacyTypes,
     runSelfTests,
   };

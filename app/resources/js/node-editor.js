@@ -5,6 +5,7 @@ const NodeEditor = (() => {
   let selectedNodeId = null;
   let selectedBlockId = null;
   let assignMode = false;
+  let assignHoverBlockId = null;
   let collapsedIds = new Set();
 
   let treeEl = null;
@@ -14,9 +15,11 @@ const NodeEditor = (() => {
   let shellEl = null;
   let getPreviewEl = () => null;
   let getIsActive = () => true;
+  let getConditionValues = () => ({});
   let onStatus = () => {};
   let onModelChange = () => {};
   let eventsBound = false;
+  let boundEventsRoot = null;
   let previewClickBound = false;
   let treeDragBound = false;
   let dragNodeId = null;
@@ -414,8 +417,9 @@ const NodeEditor = (() => {
     const hasSelection = Boolean(rawNode);
     const showEditor = activeRulesPage === "editor" && hasSelection;
 
+    // Keep structure/conditions tabs reachable while editing a node (Preview ↔ Rules remounts too).
     if (subnav) {
-      subnav.hidden = showEditor;
+      subnav.hidden = false;
     }
 
     if (editorLabel) {
@@ -431,7 +435,7 @@ const NodeEditor = (() => {
       addSectionBtn.hidden = showEditor || activeRulesPage !== "structure";
     }
     if (addConditionBtn) {
-      addConditionBtn.hidden = showEditor || activeRulesPage !== "fields";
+      addConditionBtn.hidden = showEditor;
     }
 
     pages.forEach((page) => {
@@ -502,8 +506,10 @@ const NodeEditor = (() => {
       } else {
         variantsEl.hidden = false;
         variantsEl.innerHTML = `
-          <div class="rules-variant-setup">
-            <p class="rules-variant-setup-label">${uk("variantsTitle")}</p>
+          <div class="rules-variant-nav rules-variant-nav--setup">
+            <div class="rules-variant-nav-head">
+              <span class="rules-variant-nav-label">${uk("variantsNavLabel")}</span>
+            </div>
             ${renderNestedVariantsBlock(node)}
           </div>`;
         syncAddNodeHints();
@@ -518,28 +524,7 @@ const NodeEditor = (() => {
     }
 
     variantsEl.hidden = false;
-    variantsEl.innerHTML = `
-      <nav class="rules-context-tabs" aria-label="${escapeHtml(uk("variantGroupLabel"))}">
-        ${branches
-          .map((branch) => {
-            const detail = formatConditionDetail(branch);
-            const tone = getBranchTone(branch);
-            const active = selectedNodeId === branch.id;
-            return `
-              <button type="button"
-                class="rules-context-tab rules-context-tab--${tone} ${active ? "is-active" : ""}"
-                data-select-node="${escapeHtml(branch.id)}">
-                <span class="rules-context-tab-label">${escapeHtml(NodeModel.nodeLabel(branch))}</span>
-                ${
-                  detail?.valueHuman
-                    ? `<span class="rules-context-tab-meta">${escapeHtml(detail.valueHuman)}</span>`
-                    : ""
-                }
-              </button>`;
-          })
-          .join("")}
-        ${hostSection ? renderAddChoiceBranchAction(hostSection) : ""}
-      </nav>`;
+    variantsEl.innerHTML = renderVariantContextNav(hostSection, branches);
     syncAddNodeHints();
   }
 
@@ -552,16 +537,81 @@ const NodeEditor = (() => {
       </div>`;
   }
 
-  function renderInspectorCard(title, body, extraClass = "") {
+  function renderInspectorCard(title, body, extraClass = "", headerActionsHtml = "") {
     const trimmed = (body || "").trim();
     if (!trimmed) return "";
     return `
       <section class="node-inspector-card ${extraClass}">
         <header class="node-inspector-card-head">
           <h3 class="node-inspector-card-title">${escapeHtml(title)}</h3>
+          ${
+            headerActionsHtml
+              ? `<div class="node-inspector-card-actions">${headerActionsHtml}</div>`
+              : ""
+          }
         </header>
         <div class="node-inspector-card-body">${body}</div>
       </section>`;
+  }
+
+  function isContainerWithHeaderDelete(node) {
+    if (!node) return false;
+    if (isVariantBranch(node)) return false;
+    if (node.type === "section" && node.condition) return false;
+    return node.type === "section" || node.type === "marker";
+  }
+
+  function renderContainerDeleteAction(node) {
+    if (!isContainerWithHeaderDelete(node)) return "";
+    const label = node.type === "marker" ? uk("deleteMarker") : uk("deleteSection");
+    const tip = node.type === "marker" ? uk("deleteMarkerTip") : uk("deleteSectionTip");
+    return `<button type="button" class="btn btn-sm btn-danger" data-delete-subtree="${escapeHtml(node.id)}" title="${escapeHtml(tip)}">${escapeHtml(label)}</button>`;
+  }
+
+  function renderVariantContextNav(hostSection, branches) {
+    const fork = hostSection ? findVariantFork(hostSection) : null;
+
+    return `
+      <div class="rules-variant-nav">
+        <div class="rules-variant-nav-head">
+          <span class="rules-variant-nav-label">${uk("variantsNavLabel")}</span>
+          <div class="rules-variant-nav-actions">
+            ${
+              fork
+                ? `<button type="button" class="btn btn-sm btn-danger" data-delete-variant-group="${escapeHtml(fork.id)}" title="${uk("deleteVariantGroupTip")}">${uk("deleteVariantGroup")}</button>`
+                : ""
+            }
+            ${hostSection ? renderAddChoiceBranchAction(hostSection) : ""}
+          </div>
+        </div>
+        <nav class="rules-context-tabs" aria-label="${escapeHtml(uk("variantGroupLabel"))}">
+          ${branches
+            .map((branch) => {
+              const detail = formatConditionDetail(branch);
+              const tone = getBranchTone(branch);
+              const active = selectedNodeId === branch.id;
+              const blocks = countBranchBlocks(branch.id);
+              return `
+                <button type="button"
+                  class="rules-context-tab rules-context-tab--${tone} ${active ? "is-active" : ""}"
+                  data-select-node="${escapeHtml(branch.id)}">
+                  <span class="rules-context-tab-label">${escapeHtml(NodeModel.nodeLabel(branch))}</span>
+                  ${
+                    detail?.valueHuman
+                      ? `<span class="rules-context-tab-meta">${escapeHtml(detail.valueHuman)}</span>`
+                      : ""
+                  }
+                  <span class="rules-context-tab-blocks">${blocks} ${uk("variantBlocks")}</span>
+                </button>`;
+            })
+            .join("")}
+        </nav>
+        ${
+          fork
+            ? `<div class="rules-variant-nav-foot">${renderVariantGroupFieldPicker(fork.id)}</div>`
+            : ""
+        }
+      </div>`;
   }
 
   function renderEditorBreadcrumb(node) {
@@ -629,7 +679,10 @@ const NodeEditor = (() => {
 
     return `
       <section class="node-exclusive-structure">
-        <h4 class="node-exclusive-structure-heading">${uk("structureTreeTitle")}</h4>
+        <div class="node-exclusive-structure-head">
+          <h4 class="node-exclusive-structure-heading">${uk("structureTreeTitle")}</h4>
+          <button type="button" class="btn btn-sm btn-danger" data-delete-variant-group="${escapeHtml(fork.id)}" title="${uk("deleteVariantGroupTip")}">${uk("deleteVariantGroup")}</button>
+        </div>
         <p class="node-exclusive-structure-section-name">${escapeHtml(NodeModel.nodeLabel(sectionNode))}</p>
         <ul class="node-exclusive-structure-tree">
           ${branches
@@ -715,7 +768,9 @@ const NodeEditor = (() => {
         ${renderSimpleConditionEditor(branch)}
       </div>`;
 
-    const subVariantsBody = findVariantFork(branch) ? "" : renderNestedVariantsBlock(branch);
+    const subVariantsBody = findVariantFork(branch)
+      ? renderExclusiveStructureView(branch)
+      : renderNestedVariantsBlock(branch);
 
     return `
       ${renderContextHelpCallout(branch)}
@@ -751,9 +806,6 @@ const NodeEditor = (() => {
 
   function renderSectionInspector(section) {
     const fork = findVariantFork(section);
-    const variantsBody = fork
-      ? `${renderExclusiveStructureView(section)}${renderAddChoiceBranchAction(section)}`
-      : renderNestedVariantsBlock(section);
 
     const propertiesBody = `
       ${renderInspectorMetaPanel(section)}
@@ -765,9 +817,12 @@ const NodeEditor = (() => {
       </label>`;
 
     return `
-      ${renderContextHelpCallout(section)}
-      ${renderInspectorCard(uk("inspectorTitle"), propertiesBody, "node-inspector-card--properties")}
-      ${variantsBody ? renderInspectorCard(uk("zoneVariantsTitle"), variantsBody, "node-inspector-card--variants") : ""}
+      ${renderInspectorCard(
+        uk("inspectorTitle"),
+        propertiesBody,
+        "node-inspector-card--properties",
+        renderContainerDeleteAction(section),
+      )}
       ${renderChildrenCard(section)}`;
   }
 
@@ -790,8 +845,12 @@ const NodeEditor = (() => {
       ${fork ? renderPreviewReadinessHint(marker) : ""}`;
 
     return `
-      ${renderContextHelpCallout(marker)}
-      ${renderInspectorCard(uk("inspectorTitle"), propertiesBody, "node-inspector-card--properties")}
+      ${renderInspectorCard(
+        uk("inspectorTitle"),
+        propertiesBody,
+        "node-inspector-card--properties",
+        renderContainerDeleteAction(marker),
+      )}
       ${renderInspectorCard(uk("contentLegend"), renderBlockPicker(marker), "node-inspector-card--content")}
       ${renderChildrenCard(marker)}`;
   }
@@ -989,13 +1048,66 @@ const NodeEditor = (() => {
     });
   }
 
+  function stripRulesEditorDecorationsFromPreview() {
+    const preview = getPreviewEl();
+    if (!preview) return;
+    preview.classList.remove("is-assign-mode");
+    preview.querySelector(".docx-canvas")?.classList.remove("is-assign-mode");
+    preview.querySelectorAll("[data-block-id]").forEach((block) => {
+      block.classList.remove(
+        "docx-block--selected",
+        "docx-block--assign-target",
+        "docx-block--assign-hover",
+        "docx-block--scroll-flash",
+      );
+    });
+  }
+
+  function stripConditionOverlayFromPreview() {
+    const preview = getPreviewEl();
+    if (!preview) return;
+    preview.querySelectorAll("[data-block-id]").forEach((block) => {
+      block.classList.remove(
+        "docx-block--content-active",
+        "docx-block--content-inactive",
+        "docx-instruction",
+      );
+    });
+  }
+
+  function formatFieldPreviewValue(field, rawValue) {
+    if (rawValue === undefined || rawValue === null) return null;
+    if (field?.type === "boolean") {
+      return rawValue === true ? uk("branchYes") : rawValue === false ? uk("branchNo") : String(rawValue);
+    }
+    if (field?.type === "choice") {
+      const opt = (field.options || []).find((item) => String(item.value) === String(rawValue));
+      return opt?.label || String(rawValue);
+    }
+    return String(rawValue);
+  }
+
   function refreshHighlights() {
     const preview = getPreviewEl();
     if (!preview) return;
 
+    if (!getIsActive()) {
+      stripRulesEditorDecorationsFromPreview();
+      stripConditionOverlayFromPreview();
+      return;
+    }
+
+    stripConditionOverlayFromPreview();
+
     preview.querySelectorAll("[data-block-id]").forEach((block) => {
-      block.classList.remove("docx-block--selected", "docx-block--assign-target");
+      block.classList.remove(
+        "docx-block--selected",
+        "docx-block--assign-target",
+        "docx-block--assign-hover",
+      );
     });
+    preview.classList.toggle("is-assign-mode", Boolean(assignMode));
+    preview.querySelector(".docx-canvas")?.classList.toggle("is-assign-mode", Boolean(assignMode));
 
     if (selectedNodeId) {
       const rawNode = NodeModel.getNode(model, selectedNodeId);
@@ -1026,6 +1138,11 @@ const NodeEditor = (() => {
       preview.querySelectorAll("[data-block-id]").forEach((block) => {
         block.classList.add("docx-block--assign-target");
       });
+      if (assignHoverBlockId) {
+        preview
+          .querySelector(`[data-block-id="${CSS.escape(assignHoverBlockId)}"]`)
+          ?.classList.add("docx-block--assign-hover");
+      }
     }
   }
 
@@ -1049,11 +1166,17 @@ const NodeEditor = (() => {
               (UK()?.fieldTypeLabel("choice") || "Вибір")
             : UK()?.fieldTypeLabel(field.type) || "Так / Ні";
         const selected = preferredFieldId === field.id;
+        const previewValue = formatFieldPreviewValue(field, getConditionValues()[field.id]);
         return `
           <article class="logic-field-card ${selected ? "is-selected" : ""}">
             <button type="button" class="logic-field-card-main" data-select-field="${escapeHtml(field.id)}" title="Обрати цю умову для нових варіантів">
               <strong class="logic-field-card-title">${escapeHtml(field.label || field.id)}</strong>
               <span class="logic-field-card-meta">${escapeHtml(meta)}</span>
+              ${
+                previewValue
+                  ? `<span class="logic-field-card-preview">${escapeHtml(previewValue)}</span>`
+                  : ""
+              }
             </button>
             <div class="logic-field-card-actions">
               <button type="button" class="btn btn-sm" data-node-edit-field="${escapeHtml(field.id)}" title="Редагувати умову">${uk("editField")}</button>
@@ -1062,6 +1185,70 @@ const NodeEditor = (() => {
           </article>`;
       })
       .join("");
+  }
+
+  function getVariantGroupFieldId(forkId) {
+    if (!forkId) return null;
+    if (typeof NodeTemplates?.listVariantGroupBranches === "function") {
+      const branches = NodeTemplates.listVariantGroupBranches(model, forkId);
+      return branches[0]?.condition?.condition_id || null;
+    }
+    const branches = NodeModel.orderedChildren(model, forkId).filter(isVariantBranch);
+    return branches[0]?.condition?.condition_id || null;
+  }
+
+  function applyVariantGroupField(forkId, newFieldId) {
+    if (!forkId || !newFieldId || typeof NodeTemplates?.retargetVariantGroupField !== "function") return;
+    const result = NodeTemplates.retargetVariantGroupField(model, forkId, newFieldId);
+    if (result.error === "type_mismatch") {
+      onStatus(uk("variantFieldTypeMismatch"), true);
+      renderEditorContextStrip();
+      return;
+    }
+    if (!result.ok) return;
+    if (!result.changed) return;
+    preferredFieldId = newFieldId;
+    notifyChange();
+    onStatus(`${uk("changeVariantGroupCondition")}: «${result.field?.label || newFieldId}»`);
+    renderEditorContextStrip();
+    renderInspector();
+    renderTree();
+  }
+
+  function renderVariantFieldOptions(fields, selectedId) {
+    return fields
+      .map((field) => {
+        const kind = field.type === "boolean" ? "Так/Ні" : "список";
+        return `<option value="${escapeHtml(field.id)}" ${field.id === selectedId ? "selected" : ""}>${escapeHtml(field.label || field.id)} (${kind})</option>`;
+      })
+      .join("");
+  }
+
+  function renderVariantGroupFieldPicker(forkId) {
+    const fields = model.fields || [];
+    if (!fields.length) {
+      return `<p class="node-variant-no-fields">${uk("variantsNeedCondition")}</p>`;
+    }
+    const currentFieldId = getVariantGroupFieldId(forkId);
+    const currentField = currentFieldId ? NodeModel.getField(model, currentFieldId) : null;
+    const compatibleFields = currentField
+      ? fields.filter((field) => field.type === currentField.type)
+      : fields;
+    if (!compatibleFields.length) {
+      return `<p class="node-variant-no-fields">${uk("variantsNeedCondition")}</p>`;
+    }
+    const selectedId =
+      currentFieldId && compatibleFields.some((field) => field.id === currentFieldId)
+        ? currentFieldId
+        : compatibleFields[0].id;
+
+    return `
+      <label class="node-field node-variant-field-picker rules-variant-nav-field">
+        <span class="node-field-label">${uk("changeVariantGroupCondition")}</span>
+        <select class="node-input" data-variant-group-field="${escapeHtml(forkId)}">
+          ${renderVariantFieldOptions(compatibleFields, selectedId)}
+        </select>
+      </label>`;
   }
 
   function getVariantFieldPickerValue() {
@@ -1098,12 +1285,7 @@ const NodeEditor = (() => {
       <label class="node-field node-variant-field-picker">
         <span class="node-field-label">${uk("pickConditionForVariants")}</span>
         <select class="node-input" id="node-variant-field-picker">
-          ${fields
-            .map((field) => {
-              const kind = field.type === "boolean" ? "Так/Ні" : "список";
-              return `<option value="${escapeHtml(field.id)}" ${field.id === currentId ? "selected" : ""}>${escapeHtml(field.label || field.id)} (${kind})</option>`;
-            })
-            .join("")}
+          ${renderVariantFieldOptions(fields, currentId)}
         </select>
       </label>`;
   }
@@ -1395,6 +1577,7 @@ const NodeEditor = (() => {
   function renderTreeToolbar(node) {
     const canUp = NodeModel.canMoveNodeUp(model, node.id);
     const canDown = NodeModel.canMoveNodeDown(model, node.id);
+    const showDelete = !isContainerWithHeaderDelete(node);
 
     return `
       <div class="node-inspector-toolbar">
@@ -1403,9 +1586,13 @@ const NodeEditor = (() => {
           <button type="button" class="btn btn-sm" data-move-node-up="${escapeHtml(node.id)}" ${canUp ? "" : "disabled"} title="${uk("moveUpTip")}">${uk("moveUp")}</button>
           <button type="button" class="btn btn-sm" data-move-node-down="${escapeHtml(node.id)}" ${canDown ? "" : "disabled"} title="${uk("moveDownTip")}">${uk("moveDown")}</button>
         </div>
-        <div class="node-inspector-toolbar-end">
-          <button type="button" class="btn btn-sm btn-danger" data-delete-subtree="${escapeHtml(node.id)}" title="${uk("deleteSubtreeTip")}">${uk("deleteSubtree")}</button>
-        </div>
+        ${
+          showDelete
+            ? `<div class="node-inspector-toolbar-end">
+                <button type="button" class="btn btn-sm btn-danger" data-delete-subtree="${escapeHtml(node.id)}" title="${uk("deleteSubtreeTip")}">${uk("deleteSubtree")}</button>
+              </div>`
+            : ""
+        }
       </div>`;
   }
 
@@ -1574,6 +1761,21 @@ const NodeEditor = (() => {
 
       refreshHighlights();
     });
+
+    previewEl.addEventListener("mousemove", (event) => {
+      if (!getIsActive() || !assignMode) return;
+      const block = event.target.closest("[data-block-id]");
+      const blockId = block?.getAttribute("data-block-id") || null;
+      if (blockId === assignHoverBlockId) return;
+      assignHoverBlockId = blockId;
+      refreshHighlights();
+    });
+
+    previewEl.addEventListener("mouseleave", () => {
+      if (!assignHoverBlockId) return;
+      assignHoverBlockId = null;
+      refreshHighlights();
+    });
   }
 
   function applyInspectorValue(nodeId, path, rawValue, inputType) {
@@ -1622,26 +1824,37 @@ const NodeEditor = (() => {
     onStatus("Поле видалено");
   }
 
-  async function deleteSubtreeAsync(nodeId) {
+  async function deleteSubtreeAsync(nodeId, { variantGroup = false } = {}) {
     const node = NodeModel.getNode(model, nodeId);
     if (!node) return;
 
+    const isGroup = variantGroup || NodeModel.isVariantForkNode(model, node);
     const confirmed =
       typeof Dialogs !== "undefined" && Dialogs.confirm
         ? await Dialogs.confirm({
-            title: "Видалити розділ?",
-            message: `«${NodeModel.nodeLabel(node)}» і все всередині буде видалено.`,
+            title: isGroup ? "Видалити групу варіантів?" : "Видалити розділ?",
+            message: isGroup
+              ? `Група «${NodeModel.nodeLabel(node)}» і всі її варіанти будуть видалені з правил.`
+              : `«${NodeModel.nodeLabel(node)}» і все всередині буде видалено.`,
+            detail: isGroup
+              ? "Прив’язки блоків до цієї групи зникнуть. Документ не зміниться."
+              : "Цю дію не можна скасувати в редакторі правил.",
             variant: "danger",
             confirmText: "Видалити",
+            cancelText: "Скасувати",
           })
-        : window.confirm(`Видалити «${NodeModel.nodeLabel(node)}» та дочірні вузли?`);
+        : window.confirm(
+            isGroup
+              ? `Видалити групу «${NodeModel.nodeLabel(node)}»?`
+              : `Видалити «${NodeModel.nodeLabel(node)}» та дочірні вузли?`,
+          );
 
     if (!confirmed) return;
 
     NodeModel.deleteSubtree(model, nodeId);
     if (selectedNodeId === nodeId) selectedNodeId = null;
     notifyChange();
-    onStatus("Піддерево видалено");
+    onStatus(isGroup ? "Групу варіантів видалено" : "Піддерево видалено");
   }
 
   function clearDropIndicators() {
@@ -1769,14 +1982,18 @@ const NodeEditor = (() => {
   }
 
   function bindEvents(root) {
-    if (!root || eventsBound) return;
+    if (!root) return;
+    if (eventsBound && boundEventsRoot === root) return;
+    boundEventsRoot = root;
     eventsBound = true;
 
     root.addEventListener("click", (event) => {
       const pageTab = event.target.closest("[data-rules-page]:not(.rules-page)");
-      if (pageTab && shellEl?.contains(pageTab)) {
+      if (pageTab) {
         event.preventDefault();
-        navigateToPage(pageTab.dataset.rulesPage);
+        const pageId = pageTab.dataset.rulesPage;
+        if (!pageId || !RULES_PAGES.includes(pageId) || pageId === "editor") return;
+        navigateToPage(pageId);
         renderAll();
         return;
       }
@@ -1880,7 +2097,7 @@ const NodeEditor = (() => {
         expandToNode(branchId);
         renderInspector();
         refreshHighlights();
-        onStatus("Клікніть абзац у документі праворуч — він додасться до цього варіанту");
+        onStatus("Наведіть на абзац у документі або оберіть блок зі списку «Блоки документа»");
         return;
       }
 
@@ -1910,7 +2127,7 @@ const NodeEditor = (() => {
         assignMode = !assignMode;
         renderInspector();
         refreshHighlights();
-        onStatus(assignMode ? "Клікайте абзаци в документі, щоб додати блок" : "Режим вибору вимкнено");
+        onStatus(assignMode ? "Клікніть абзац або оберіть блок зі списку нижче" : "Режим вибору вимкнено");
         return;
       }
 
@@ -1978,6 +2195,14 @@ const NodeEditor = (() => {
         event.preventDefault();
         event.stopPropagation();
         void deleteSubtreeAsync(deleteSubtreeBtn.dataset.deleteSubtree);
+        return;
+      }
+
+      const deleteGroupBtn = event.target.closest("[data-delete-variant-group]");
+      if (deleteGroupBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        void deleteSubtreeAsync(deleteGroupBtn.dataset.deleteVariantGroup, { variantGroup: true });
         return;
       }
 
@@ -2083,6 +2308,12 @@ const NodeEditor = (() => {
           return;
         }
 
+        const variantGroupField = event.target.closest("[data-variant-group-field]");
+        if (variantGroupField) {
+          applyVariantGroupField(variantGroupField.dataset.variantGroupField, variantGroupField.value);
+          return;
+        }
+
         const reparentSelect = event.target.closest("[data-reparent-node]");
         if (reparentSelect) {
           const nodeId = reparentSelect.dataset.reparentNode;
@@ -2122,6 +2353,7 @@ const NodeEditor = (() => {
       shellEl: host,
       previewEl,
       getIsActive: isActiveFn,
+      getConditionValues: conditionValuesFn,
       statusFn,
       onModelChange: changeFn,
     }) {
@@ -2133,6 +2365,7 @@ const NodeEditor = (() => {
       workflowHelpEl = document.getElementById("node-workflow-help-body");
       getPreviewEl = () => previewEl;
       getIsActive = isActiveFn || (() => true);
+      getConditionValues = conditionValuesFn || (() => ({}));
       onStatus = statusFn || (() => {});
       onModelChange = changeFn || (() => {});
       bindEvents(shellEl || treeEl?.closest(".node-editor-shell"));
@@ -2140,13 +2373,31 @@ const NodeEditor = (() => {
       bindPreviewClicks(previewEl);
     },
 
-    setModel(raw) {
+    setModel(raw, { preserveNavigation = false } = {}) {
+      const prevPage = activeRulesPage;
+      const prevSelected = selectedNodeId;
+      const prevCollapsed = new Set(collapsedIds);
+
       model = NodeModel.cloneModel(raw || NodeModel.emptyModel());
-      selectedNodeId = NodeModel.rootNodes(model)[0]?.id || null;
       selectedBlockId = null;
       assignMode = false;
-      collapsedIds = new Set();
-      activeRulesPage = "structure";
+
+      if (preserveNavigation) {
+        activeRulesPage = RULES_PAGES.includes(prevPage) ? prevPage : "structure";
+        if (prevSelected && NodeModel.getNode(model, prevSelected)) {
+          selectedNodeId = prevSelected;
+        } else {
+          selectedNodeId = NodeModel.rootNodes(model)[0]?.id || null;
+          if (activeRulesPage === "editor" && !selectedNodeId) {
+            activeRulesPage = "structure";
+          }
+        }
+        collapsedIds = prevCollapsed;
+      } else {
+        selectedNodeId = NodeModel.rootNodes(model)[0]?.id || null;
+        collapsedIds = new Set();
+        activeRulesPage = "structure";
+      }
     },
 
     setRules(raw) {
@@ -2170,8 +2421,17 @@ const NodeEditor = (() => {
     },
 
     getActiveConditionIds() {
-      if (!this.hasConfiguredRules()) return [];
       return NodeModel.collectRequiredFieldIds(model);
+    },
+
+    getAllConditionFieldIds() {
+      return NodeModel.collectRequiredFieldIds(model);
+    },
+
+    refreshConditionUi() {
+      renderFieldsPanel();
+      stripConditionOverlayFromPreview();
+      refreshHighlights();
     },
 
     selectNodeByBlockId(blockId) {
@@ -2184,13 +2444,23 @@ const NodeEditor = (() => {
 
     deactivate() {
       assignMode = false;
+      assignHoverBlockId = null;
       selectedBlockId = null;
-      refreshHighlights();
+      stripRulesEditorDecorationsFromPreview();
+      stripConditionOverlayFromPreview();
     },
 
     backToStructure() {
       navigateToPage("structure");
       renderAll();
+    },
+
+    goToRulesPage(pageId, options = {}) {
+      navigateToPage(pageId, options);
+    },
+
+    goToFieldsPage() {
+      openFieldsPage();
     },
 
     render() {
