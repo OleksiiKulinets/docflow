@@ -11,21 +11,26 @@
   flex-shrink: 0
   display: flex
   align-items: stretch
-  justify-content: space-between
+  justify-content: flex-start
   flex-wrap: nowrap
   gap: 8px
   height: var(--toolbar-height)
   min-height: var(--toolbar-height)
   max-height: var(--toolbar-height)
-  padding: 0 12px 0 0
+  padding: 0 8px 0 0
   border-bottom: 1px solid $border
   background: $bg-sidebar
   overflow-x: auto
   overflow-y: hidden
-  scrollbar-width: none
+  scrollbar-width: thin
+  -webkit-overflow-scrolling: touch
 
   &::-webkit-scrollbar
-    display: none
+    height: 4px
+
+  &::-webkit-scrollbar-thumb
+    background: color-mix(in srgb, $text 18%, transparent)
+    border-radius: 999px
 
 .rules-panel-chrome-start
   display: flex
@@ -33,6 +38,7 @@
   gap: 0
   min-width: 0
   flex: 1 1 auto
+  overflow: hidden
 
   .rules-panel-back:not([hidden]) + .rules-segment-nav .rules-segment-nav-item:first-child
     padding-left: 0
@@ -43,8 +49,8 @@
   flex-wrap: nowrap
   justify-content: flex-end
   gap: 8px
-  flex-shrink: 0
-  padding-left: 12px
+  flex: 0 0 auto
+  padding-left: 8px
   margin-left: auto
   border-left: 1px solid $border
 
@@ -56,6 +62,12 @@
 
   .btn[hidden]
     display: none !important
+
+.rules-segment-nav-label--short
+  display: none
+
+.rules-chrome-btn-save-text--short
+  display: none
 
 .rules-chrome-btn
   gap: 4px
@@ -90,6 +102,12 @@
   gap: 0
   min-width: 0
   flex: 1 1 auto
+  overflow-x: auto
+  overflow-y: hidden
+  scrollbar-width: none
+
+  &::-webkit-scrollbar
+    display: none
 
   &[hidden]
     display: none !important
@@ -223,18 +241,18 @@
 .node-reparent-field select
   max-width: 560px
 
-// Narrow rules panel — compact single row (never wrap — preserves tab underline)
+// Narrow rules panel — compact layout (wrap to two rows before elements overlap)
 @container rules-panel (max-width: 420px)
   .rules-panel-chrome
-    padding: 0 8px
+    padding: 0 6px 0 0
     gap: 4px
 
   .rules-segment-nav-item
-    padding: 0 12px
+    padding: 0 10px
     font-size: var(--text-caption)
 
   .rules-panel-chrome-actions
-    padding-left: 8px
+    padding-left: 6px
     gap: 4px
 
   .rules-chrome-btn
@@ -242,7 +260,37 @@
 
   .rules-chrome-btn--primary
     min-width: 0
-    padding: 0 12px
+    padding: 0 10px
+
+@container rules-panel (max-width: 360px)
+  .rules-panel-chrome
+    flex-wrap: wrap
+    align-content: flex-start
+    height: auto
+    min-height: var(--toolbar-height)
+    max-height: none
+    row-gap: 4px
+    padding: 4px 6px
+    overflow-x: hidden
+
+  .rules-panel-chrome-start
+    flex: 1 1 100%
+    width: 100%
+    max-width: 100%
+    overflow: visible
+
+  .rules-segment-nav
+    overflow: visible
+
+  .rules-panel-chrome-actions
+    flex: 1 1 100%
+    width: 100%
+    margin-left: 0
+    padding-left: 0
+    border-left: none
+    justify-content: flex-start
+    overflow-x: auto
+    scrollbar-width: thin
 
 @container rules-panel (max-width: 340px)
   .rules-chrome-btn:not(.rules-chrome-btn--primary) .rules-chrome-btn-text
@@ -252,9 +300,25 @@
     min-width: $control-height
     padding: 0
 
-  .rules-panel-chrome-actions
-    border-left: none
-    padding-left: 4px
-
   .rules-panel-editor-type
     display: none
+
+@container rules-panel (max-width: 320px)
+  .rules-segment-nav-label--long
+    display: none
+
+  .rules-segment-nav-label--short
+    display: inline
+
+  .rules-segment-nav-item
+    padding: 0 8px
+
+  .rules-chrome-btn-save-text--long
+    display: none
+
+  .rules-chrome-btn-save-text--short
+    display: inline
+
+  .rules-chrome-btn--primary
+    min-width: 0
+    padding: 0 10px

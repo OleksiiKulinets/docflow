@@ -62,6 +62,18 @@
   background: $bg
   padding: $space-2
 
+  .node-inspector,
+  .node-inspector-host .node-inspector
+    max-width: none
+    width: 100%
+
+  .node-inspector-card,
+  .node-field,
+  .node-input,
+  .node-reparent-field select
+    max-width: none
+    width: 100%
+
 // ─── Editor page header (back + title + variant tabs) ───
 .rules-editor-header
   flex-shrink: 0
@@ -208,6 +220,77 @@
   border-radius: $radius-sm
   background: $bg-panel
 
+.node-inspector-card--variant-nav
+  .node-inspector-card-body
+    padding: $space-2
+
+.node-variant-nav-panel
+  display: flex
+  flex-direction: column
+  gap: $space-2
+
+.node-variant-nav-panel-foot
+  display: flex
+  flex-direction: column
+  gap: $space-2
+  padding-top: $space-2
+  border-top: 1px solid $border
+
+.node-variant-nav-panel-actions
+  display: flex
+  flex-wrap: wrap
+  align-items: center
+  justify-content: space-between
+  gap: $space-2
+
+.node-variant-tabs.rules-context-tabs
+  gap: $space-1
+  padding: 0
+  min-height: 0
+
+.node-variant-tabs .rules-context-tab
+  flex: 1 1 0
+  min-width: 5.5rem
+  height: auto
+  min-height: 3.25rem
+  padding: $space-2
+  flex-direction: column
+  align-items: flex-start
+  gap: 2px
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: $bg-input
+
+  &:hover
+    border-color: $text-muted
+    background: $bg-hover
+
+  &.is-active
+    border-color: $accent
+    background: $accent-subtle
+    font-weight: var(--weight-semibold)
+
+  &--yes.is-active
+    border-color: var(--branch-yes)
+    background: var(--branch-yes-subtle)
+
+  &--no.is-active
+    border-color: var(--branch-no)
+    background: var(--branch-no-subtle)
+
+.node-danger-link
+  padding: 0
+  border: none
+  background: transparent
+  color: $text-tertiary
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+  text-decoration: underline
+  text-underline-offset: 2px
+  cursor: pointer
+
+  &:hover
+    color: $danger
+
 .rules-variant-nav-head
   display: flex
   align-items: center
@@ -289,22 +372,22 @@
 .rules-variant-nav--setup .node-variants-panel
   margin: 0
 
-.rules-variant-nav--setup .node-variant-quick-btn
-  &--yes
-    border-color: var(--branch-yes)
-    background: var(--branch-yes-subtle)
+.node-variant-preview
+  display: flex
+  flex-direction: column
+  gap: $space-1
 
-    &:hover
-      border-color: var(--branch-yes)
-      background: rgba(63, 185, 80, 0.22)
+.node-variant-preview-label
+  margin: 0
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+  color: $text-secondary
 
-  &--choice
-    border-color: $accent
-    background: $accent-subtle
+.node-variant-preview-tabs
+  pointer-events: none
 
-    &:hover
-      border-color: $accent
-      background: rgba(76, 175, 80, 0.2)
+.node-variant-preview-tab
+  cursor: default
+  opacity: 0.92
 
 .node-zone-empty,
 .node-tree-empty,
@@ -585,6 +668,99 @@
   border-radius: 0
   background: $bg-hover
   font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+
+.node-content-assign-empty
+  display: flex
+  flex-direction: column
+  gap: $space-3
+
+  .node-inspector-actions--assign
+    margin-top: 0
+
+.node-content-assign-panel
+  display: flex
+  flex-direction: column
+  gap: $space-3
+
+.node-content-assign-empty-note
+  margin: 0
+  padding: $space-2 $space-2 $space-1
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+  color: $text-tertiary
+  text-align: center
+
+.node-block-section--assigned
+  padding: $space-2
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: color-mix(in srgb, $surface 96%, $accent 4%)
+
+.node-block-section-count
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  min-width: 1.25rem
+  height: 1.25rem
+  margin-left: $space-1
+  padding: 0 5px
+  border-radius: 999px
+  font: var(--weight-medium) 10px/1 $font
+  color: $accent
+  background: color-mix(in srgb, $accent 14%, transparent)
+
+.node-add-selected-block
+  align-self: flex-start
+
+.node-doc-blocks-details
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: color-mix(in srgb, $surface 98%, $text 2%)
+
+  &[open] .node-doc-blocks-summary
+    border-bottom: 1px solid $border
+
+.node-doc-blocks-summary
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: $space-2
+  padding: $space-2 $space-2
+  font: var(--weight-medium) var(--text-label)/var(--leading-tight) $font
+  color: $text-secondary
+  cursor: pointer
+  list-style: none
+  user-select: none
+
+  &::-webkit-details-marker
+    display: none
+
+  &::before
+    content: "▸"
+    display: inline-block
+    width: 1em
+    color: $text-tertiary
+    transition: transform .15s ease
+
+.node-doc-blocks-details[open] > .node-doc-blocks-summary::before
+  transform: rotate(90deg)
+
+.node-doc-blocks-summary-meta
+  font: var(--weight-medium) var(--text-caption)/1 $font
+  color: $text-muted
+  padding: 2px 7px
+  border-radius: 999px
+  background: $bg-hover
+
+.node-doc-blocks-body
+  padding: 0 $space-2 $space-2
+
+.node-doc-blocks-hint
+  margin: 0 0 $space-2
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+  color: $text-tertiary
+
+.node-doc-blocks-empty
+  margin: 0
 
 .node-empty-state
   padding: $space-2
@@ -995,6 +1171,31 @@
   display: flex
   flex-direction: column
   gap: $tree-gap
+  max-height: 280px
+  overflow: auto
+
+.logic-blocks-wrap.is-collapsed .logic-blocks-list
+  max-height: 220px
+
+.logic-blocks-toggle
+  margin-top: $space-2
+  width: 100%
+
+.logic-block-chip--span
+  .node-block-chip-id
+    color: var(--accent)
+    font-style: italic
+
+.node-block-filter
+  display: block
+  margin-bottom: $space-2
+
+.node-block-filter-input
+  width: 100%
+
+.node-assign-selection-hint
+  margin-top: $space-2
+  font-size: var(--text-caption)
 
 .logic-block-chip
   display: flex
@@ -1192,6 +1393,8 @@
     margin-top: $space-2
 
 .node-block-section-head
+  display: flex
+  align-items: center
   margin-bottom: $space-1
   font: var(--weight-medium) var(--text-label)/var(--leading-tight) $font
   color: $text-tertiary
@@ -1237,6 +1440,43 @@
   font: var(--weight-regular) var(--text-body-sm)/var(--leading-normal) $font
   color: $text
 
+.node-block-picker-group
+  display: flex
+  flex-direction: column
+  gap: $space-1
+
+.node-block-picker-table
+  width: 100%
+  display: flex
+  flex-direction: column
+  align-items: flex-start
+  gap: 2px
+  padding: $space-2
+  border: 1px solid color-mix(in srgb, $accent 35%, $border)
+  border-radius: $radius-sm
+  background: color-mix(in srgb, $accent 8%, $bg)
+  color: $text
+  text-align: left
+  cursor: pointer
+
+  &:hover
+    border-color: $accent
+    background: color-mix(in srgb, $accent 14%, $bg)
+
+.node-block-picker-table-label
+  font: var(--weight-semibold) var(--text-body-sm)/var(--leading-tight) $font
+  color: $text
+
+.node-block-picker-table-meta
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+  color: $text-secondary
+
+.node-block-picker--nested
+  margin-left: $space-2
+  padding-left: $space-2
+  border-left: 1px dashed $border
+  max-height: 160px
+
 .node-tree-ops
   display: none
 
@@ -1249,6 +1489,159 @@
   flex-wrap: wrap
   gap: $space-1
   margin-top: $space-1
+
+  &--assign
+    flex-direction: column
+    align-items: stretch
+    gap: $space-2
+
+.assign-mode-picker
+  display: flex
+  flex-direction: column
+  gap: $space-2
+  width: 100%
+
+.assign-mode-picker-lead
+  margin: 0
+  font: var(--weight-medium) var(--text-body-sm)/var(--leading-tight) $font
+  color: $text
+
+.assign-mode-cards
+  display: grid
+  grid-template-columns: 1fr
+  gap: $space-1
+
+.assign-mode-card
+  display: flex
+  align-items: flex-start
+  gap: $space-2
+  width: 100%
+  padding: $space-2
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: $bg
+  color: $text
+  text-align: left
+  cursor: pointer
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease
+
+  &:hover
+    border-color: color-mix(in srgb, $accent 45%, $border)
+    background: color-mix(in srgb, $accent 6%, $bg)
+
+  &:focus-visible
+    outline: 2px solid color-mix(in srgb, $accent 55%, transparent)
+    outline-offset: 2px
+
+.assign-mode-card-icon
+  flex: 0 0 auto
+  width: 2rem
+  height: 2rem
+  border-radius: calc(#{$radius-sm} - 1px)
+  background: color-mix(in srgb, $accent 10%, $bg-hover)
+  position: relative
+
+  &--block::after
+    content: ""
+    position: absolute
+    inset: 7px 6px 6px 7px
+    border: 2px solid color-mix(in srgb, $accent 70%, $text-muted)
+    border-radius: 2px
+
+  &--marquee::after
+    content: ""
+    position: absolute
+    inset: 8px
+    border: 1.5px dashed color-mix(in srgb, $accent 65%, $text-muted)
+    border-radius: 2px
+
+  &--text::after
+    content: "Aa"
+    position: absolute
+    inset: 0
+    display: flex
+    align-items: center
+    justify-content: center
+    font: var(--weight-semibold) 11px/1 $font
+    color: color-mix(in srgb, $accent 75%, $text-muted)
+
+.assign-mode-card-text
+  display: flex
+  flex-direction: column
+  gap: 2px
+  min-width: 0
+
+.assign-mode-card-title
+  font: var(--weight-semibold) var(--text-body-sm)/var(--leading-tight) $font
+  color: $text
+
+.assign-mode-card-desc
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+  color: $text-secondary
+
+.assign-mode-active-row
+  display: flex
+  align-items: center
+  gap: $space-2
+  flex-wrap: wrap
+
+.assign-mode-active-hint
+  margin: 0
+  padding: $space-1 $space-2
+  border-radius: $radius-sm
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+  color: $text-secondary
+  background: color-mix(in srgb, $accent 8%, $bg-hover)
+
+.assign-mode-add-span
+  align-self: flex-start
+
+.assign-mode-done
+  flex: 0 0 auto
+  margin-left: auto
+
+.assign-tool-bar
+  display: flex
+  flex-direction: column
+  gap: $space-2
+  width: 100%
+
+.assign-tool-switch
+  display: inline-flex
+  flex: 1 1 auto
+  flex-wrap: wrap
+  gap: 2px
+  padding: 3px
+  border: 1px solid $border
+  border-radius: $radius-sm
+  background: color-mix(in srgb, $surface 92%, $text 8%)
+  min-width: 0
+
+.assign-tool-btn
+  flex: 1 1 auto
+  min-width: 4.5rem
+  padding: $space-1 $space-2
+  border: 1px solid transparent
+  border-radius: calc(#{$radius-sm} - 2px)
+  background: transparent
+  color: $text-secondary
+  font: var(--weight-medium) var(--text-label)/var(--leading-tight) $font
+  cursor: pointer
+  transition: background .15s ease, color .15s ease, border-color .15s ease
+
+  &:hover
+    color: $text
+    background: color-mix(in srgb, $accent 8%, transparent)
+
+  &.is-active
+    color: $text
+    background: color-mix(in srgb, $accent 16%, $surface)
+    border-color: color-mix(in srgb, $accent 45%, transparent)
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, $accent 20%, transparent)
+
+  &:focus-visible
+    outline: 2px solid color-mix(in srgb, $accent 45%, transparent)
+    outline-offset: 1px
 
 .node-fields-panel
   margin-bottom: 0

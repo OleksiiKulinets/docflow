@@ -4,11 +4,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from docflow_docx.pages import (
-    load_document_model,
     load_document_settings,
     load_edit_html,
     load_source_html,
     load_variant_rules,
+    load_cached_structure_edit_html,
+    save_v5_rules_update,
+    save_structure_edit_cache_only,
+    structure_edit_cache_key,
     load_draft_source_html,
     make_editable,
     needs_numbering_refresh,
@@ -39,6 +42,7 @@ from docflow_docx.structure import (
     _condition_values_from_settings,
     _explicit_condition_values,
     _rules_ready_to_apply,
+    _v5_collect_reachable_field_ids,
 )
 from docflow_docx.writer import write_docx_from_html
 
@@ -89,7 +93,8 @@ def _v5_node_configured(model: dict, node: dict) -> bool:
             return all(_v5_node_configured(model, branch) for branch in branches)
 
     block_ids = ((node.get("content") or {}).get("block_ids") or [])
-    if block_ids:
+    spans = ((node.get("content") or {}).get("spans") or [])
+    if block_ids or spans:
         return True
 
     children = [
@@ -110,7 +115,7 @@ def _v5_has_configured(model: dict) -> bool:
 
 
 def _v5_rules_ready_to_apply(model: dict, condition_values: dict) -> bool:
-    active_ids = _v5_active_field_ids(model)
+    active_ids = _v5_collect_reachable_field_ids(model, condition_values)
     if not active_ids:
         return False
     if not _v5_has_configured(model):
@@ -119,8 +124,8 @@ def _v5_rules_ready_to_apply(model: dict, condition_values: dict) -> bool:
 
 
 def _v5_preview_conditions_ready(model: dict, condition_values: dict) -> bool:
-    """True when every referenced condition field has a chosen value."""
-    active_ids = _v5_active_field_ids(model)
+    """True when every reachable condition field has a chosen value."""
+    active_ids = _v5_collect_reachable_field_ids(model, condition_values)
     if not active_ids:
         return False
     return all(condition_values.get(field_id) is not None for field_id in active_ids)
@@ -183,26 +188,42 @@ def _should_finalize_preview(
     return _rules_ready(rules, condition_values)
 
 
-def _load_rules_for_document(path: Path, source_html: str) -> dict:
-    document_model = load_document_model(path)
-    if _is_v5_model(document_model):
-        return document_model
-    stored_rules = load_variant_rules(path)
-    return load_or_detect_rules(source_html, stored_rules)
-
-
 def _load_docx_context(path: Path) -> dict:
-    saved_html = load_edit_html(path)
+    from docflow_docx.pages import load_edit_data
+
+    data = load_edit_data(path)
+
+    saved_html = None
+    if "html" in data:
+        saved_html = data["html"]
+    elif "pages" in data:
+        saved_html = "".join(page.get("html", "") for page in data["pages"])
     if saved_html and needs_numbering_refresh(saved_html):
         saved_html = None
 
-    source_html = load_source_html(path)
+    source_html = data.get("source_html")
+    if isinstance(source_html, str) and source_html.strip():
+        pass
+    elif saved_html:
+        source_html = saved_html
+    else:
+        source_html = None
+
     if not source_html:
         source_html = render_docx_html(path)
 
-    source_html = annotate_blocks(source_html)
-    settings = load_document_settings(path)
-    rules = _load_rules_for_document(path, source_html)
+    if source_html and 'data-block-id="' not in source_html:
+        source_html = annotate_blocks(source_html)
+    settings_raw = data.get("settings")
+    settings = settings_raw if isinstance(settings_raw, dict) else {}
+
+    document_model = data.get("document_model")
+    if isinstance(document_model, dict) and _is_v5_model(document_model):
+        rules = document_model
+    else:
+        stored_rules = data.get("variant_rules")
+        stored_rules = stored_rules if isinstance(stored_rules, dict) else None
+        rules = load_or_detect_rules(source_html, stored_rules)
 
     return {
         "saved_html": saved_html,
@@ -238,6 +259,72 @@ def _resolve_display_html(ctx: dict) -> str:
     )
 
 
+def _preview_needs_rule_overlay(ctx: dict) -> bool:
+    settings = ctx["settings"]
+    rules = ctx["rules"]
+    condition_values = _explicit_condition_values(settings)
+    if not condition_values:
+        return False
+    if settings.get("approved") or settings.get("approval_pending"):
+        return True
+    if _is_v5_model(rules):
+        return _v5_has_configured(rules) or bool(_v5_active_field_ids(rules))
+    return has_configured_rules(rules)
+
+
+def _try_fast_docx_preview_parts(ctx: dict) -> tuple[str, str, dict] | None:
+    """Preview without rule overlay when conditions do not affect display."""
+    if _preview_needs_rule_overlay(ctx):
+        return None
+
+    settings = dict(ctx["settings"])
+    settings.pop("is_bank_employee", None)
+    display_html = ctx["source_html"]
+    preview = make_editable(display_html)
+    meta = _document_settings({**ctx, "settings": settings})
+    return preview, display_html, meta
+
+
+def _docx_preview_parts(ctx: dict) -> tuple[str, str, dict]:
+    fast = _try_fast_docx_preview_parts(ctx)
+    if fast is not None:
+        return fast
+
+    settings = dict(ctx["settings"])
+    settings.pop("is_bank_employee", None)
+    display_html = _build_preview_display_html(
+        ctx["source_html"],
+        ctx["rules"],
+        settings,
+    )
+    preview = make_editable(display_html)
+    meta = _document_settings({**ctx, "settings": settings})
+    return preview, display_html, meta
+
+
+def resolve_preview_content(path: Path, extension: str, name: str) -> tuple[str | None, str, dict]:
+    """Побудувати preview без запису на диск (шлях читання)."""
+    if extension == ".txt":
+        text = path.read_text(encoding="utf-8", errors="replace")
+        saved = load_edit_html(path)
+        preview = make_editable(saved or _text_to_preview_html(text), "txt-document")
+        return text, preview, {}
+
+    if extension == ".docx":
+        ctx = _load_docx_context(path)
+        preview, _, meta = _docx_preview_parts(ctx)
+        return None, preview, meta
+
+    if extension == ".pdf":
+        return None, _pdf_to_preview_html(path), {}
+
+    return None, (
+        f'<p class="preview-placeholder">'
+        f'Попередній перегляд не підтримується для <code>{html.escape(extension)}</code>.'
+        f"</p>"
+    ), {}
+
+
 def build_preview(path: Path, extension: str, name: str) -> tuple[str | None, str, dict]:
     document_settings: dict = {}
 
@@ -253,26 +340,17 @@ def build_preview(path: Path, extension: str, name: str) -> tuple[str | None, st
             ctx["rules"] = normalize_rules(ctx["rules"])
             save_variant_rules(path, ctx["rules"])
 
-        settings = dict(ctx["settings"])
-        settings.pop("is_bank_employee", None)
-
-        display_html = _build_preview_display_html(
-            ctx["source_html"],
-            ctx["rules"],
-            settings,
-        )
+        preview, display_html, settings = _docx_preview_parts(ctx)
 
         save_edit_html(
             path,
             display_html,
             source_html=ctx["source_html"],
-            settings=settings,
+            settings=dict(ctx["settings"]),
             variant_rules=ctx["rules"],
         )
         save_draft_source_html(path, ctx["source_html"])
 
-        preview = make_editable(display_html)
-        settings = _document_settings({**ctx, "settings": settings})
         return None, preview, settings
 
     if extension == ".pdf":
@@ -285,9 +363,15 @@ def build_preview(path: Path, extension: str, name: str) -> tuple[str | None, st
     ), document_settings
 
 
-def build_edit_view(path: Path) -> tuple[str, dict]:
+def build_edit_view(path: Path) -> tuple[str, dict, bool]:
     ctx = _load_docx_context(path)
-    return _build_edit_view_from_source(ctx)
+    cached = load_cached_structure_edit_html(path, ctx["source_html"])
+    if cached:
+        return cached, _document_settings(ctx), True
+
+    edit_html, meta = _build_edit_view_from_source(ctx)
+    save_structure_edit_cache_only(path, edit_html, ctx["source_html"])
+    return edit_html, meta, False
 
 
 def build_edit_view_from_html(path: Path, html_content: str) -> tuple[str, dict]:
@@ -327,32 +411,37 @@ def sync_document_source(path: Path, html_content: str) -> tuple[str, str, dict]
     clean_html = annotate_blocks(
         strip_preview_decorations(prepare_edit_html(html_content))
     )
+    deletable_block_ids = None
+    if ctx["source_html"] and ctx["rules"] is not None:
+        deletable_block_ids = collect_top_level_block_ids(
+            _build_preview_display_html(
+                ctx["source_html"],
+                ctx["rules"],
+                ctx["settings"],
+            )
+        )
     source_html = _session_source_html(
-        ctx["source_html"], clean_html, ctx["settings"], rules=ctx["rules"]
+        ctx["source_html"],
+        clean_html,
+        ctx["settings"],
+        rules=ctx["rules"],
+        deletable_block_ids=deletable_block_ids,
     )
     session_ctx = {**ctx, "source_html": source_html}
 
-    preview_html = _build_preview_display_html(
-        source_html,
-        ctx["rules"],
-        ctx["settings"],
-    )
+    preview, display_html, meta = _docx_preview_parts(session_ctx)
     edit_html, _ = _build_edit_view_from_source(session_ctx)
 
     save_edit_html(
         path,
-        preview_html,
+        display_html,
         source_html=source_html,
         settings=ctx["settings"],
         variant_rules=ctx["rules"],
     )
     save_draft_source_html(path, source_html)
 
-    return (
-        make_editable(preview_html),
-        edit_html,
-        _document_settings(session_ctx),
-    )
+    return preview, edit_html, meta
 
 
 def _session_source_html(
@@ -361,14 +450,15 @@ def _session_source_html(
     settings: dict,
     *,
     rules: dict | None = None,
+    deletable_block_ids: set[str] | None = None,
 ) -> str:
     if not clean_html:
         return annotate_blocks(stored_source or "")
     if stored_source:
-        deletable_block_ids = None
-        if rules is not None:
-            preview_html = _build_preview_display_html(stored_source, rules, settings)
-            deletable_block_ids = collect_top_level_block_ids(preview_html)
+        if deletable_block_ids is None and rules is not None:
+            deletable_block_ids = collect_top_level_block_ids(
+                _build_preview_display_html(stored_source, rules, settings)
+            )
         return annotate_blocks(
             merge_edited_into_source(
                 stored_source,
@@ -384,7 +474,7 @@ def _build_edit_view_from_source(ctx: dict) -> tuple[str, dict]:
 
     if _is_v5_model(rules):
         # Rules editor: full source for block assignment — no condition overlay.
-        html = annotate_blocks(ctx["source_html"])
+        html = ctx["source_html"]
         return make_structure_editable(html), _document_settings(ctx)
 
     highlights = get_highlight_map(
@@ -779,24 +869,34 @@ def save_docx_content(path: Path, html_content: str) -> dict:
     }
 
 
-def save_rules_and_refresh(path: Path, rules: dict) -> tuple[str, dict]:
+def save_docx_views(path: Path) -> tuple[str, str, dict]:
+    """Побудувати preview/edit HTML після save_docx_content без повторного merge."""
+    ctx = _load_docx_context(path)
+    preview, _, meta = _docx_preview_parts(ctx)
+    edit_html, _ = _build_edit_view_from_source(ctx)
+    return preview, edit_html, meta
+
+
+def save_rules_and_refresh(path: Path, rules: dict) -> tuple[str, str, dict, bool]:
     ctx = _load_docx_context(path)
 
     if _is_v5_model(rules):
+        fast = _try_v5_save_rules_fast(path, ctx, rules)
+        if fast is not None:
+            return fast
+
         ctx["rules"] = rules
-        display_html = _build_preview_display_html(
-            ctx["source_html"],
-            rules,
-            ctx["settings"],
-        )
+        preview_html, display_html, meta = _docx_preview_parts(ctx)
+        edit_html = make_structure_editable(ctx["source_html"])
         save_edit_html(
             path,
             display_html,
             source_html=ctx["source_html"],
             settings=ctx["settings"],
             variant_rules=rules,
+            structure_edit_html=edit_html,
         )
-        return make_structure_editable(ctx["source_html"]), _document_settings(ctx)
+        return edit_html, preview_html, meta, False
 
     rules = normalize_rules(rules)
     ctx["rules"] = rules
@@ -806,21 +906,62 @@ def save_rules_and_refresh(path: Path, rules: dict) -> tuple[str, dict]:
         rules,
         ctx["settings"],
     )
+    edit_html = make_structure_editable(
+        apply_highlights(
+            ctx["source_html"],
+            get_highlight_map(
+                rules,
+                condition_values=_condition_values_from_settings(ctx["settings"]),
+            ),
+        )
+    )
     save_edit_html(
         path,
         display_html,
         source_html=ctx["source_html"],
         settings=ctx["settings"],
         variant_rules=rules,
+        structure_edit_html=edit_html,
     )
 
-    highlights = get_highlight_map(
+    preview_html = make_editable(display_html)
+    return edit_html, preview_html, _document_settings(ctx), False
+
+
+def _try_v5_save_rules_fast(
+    path: Path,
+    ctx: dict,
+    rules: dict,
+) -> tuple[str, str, dict, bool] | None:
+    """Rules-only save when preview/edit HTML does not need rule overlay rebuild."""
+    settings = dict(ctx["settings"])
+    settings.pop("is_bank_employee", None)
+    condition_values = _explicit_condition_values(settings)
+
+    if _v5_has_configured(rules):
+        return None
+    if _should_finalize_preview(rules, condition_values, settings):
+        return None
+    if condition_values and _v5_active_field_ids(rules):
+        return None
+
+    session_ctx = {**ctx, "rules": rules, "settings": settings}
+    meta = _document_settings(session_ctx)
+    source_html = ctx["source_html"]
+    preview_html = make_editable(source_html)
+
+    cached_edit = load_cached_structure_edit_html(path, source_html)
+    edit_html_unchanged = cached_edit is not None
+    edit_html = cached_edit or make_structure_editable(source_html)
+
+    save_v5_rules_update(
+        path,
         rules,
-        condition_values=_condition_values_from_settings(ctx["settings"]),
+        meta,
+        structure_edit_html=None if edit_html_unchanged else edit_html,
+        structure_source_key=structure_edit_cache_key(source_html),
     )
-    marked_html = apply_highlights(ctx["source_html"], highlights)
-
-    return make_structure_editable(marked_html), _document_settings(ctx)
+    return edit_html, preview_html, meta, edit_html_unchanged
 
 
 def _build_preview_display_html(source_html: str, rules: dict, settings: dict) -> str:

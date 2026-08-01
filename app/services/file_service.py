@@ -82,7 +82,7 @@ def get_file_content(file_id: str) -> dict:
     entry = _require_entry(file_id)
     path = _require_path(entry)
 
-    content, preview_html, document_settings = document_service.build_preview(
+    content, preview_html, document_settings = document_service.resolve_preview_content(
         path,
         entry["extension"],
         entry["name"],
@@ -249,11 +249,15 @@ def get_edit_view(file_id: str, html_b64: str | None = None) -> dict:
     if html_b64:
         html = base64.b64decode(html_b64).decode("utf-8")
         edit_html, meta = document_service.build_edit_view_from_html(path, html)
-    else:
-        edit_html, meta = document_service.build_edit_view(path)
+        return {"edit_html": edit_html, "document_settings": meta, "edit_html_unchanged": False}
+    edit_html, meta, from_cache = document_service.build_edit_view(path)
     if not (edit_html or "").strip():
         _log.warning("get_edit_view returned empty edit_html for %s", file_id)
-    return {"edit_html": edit_html, "document_settings": meta}
+    return {
+        "edit_html": edit_html,
+        "document_settings": meta,
+        "edit_html_from_cache": from_cache,
+    }
 
 
 def get_preview_from_html(file_id: str, html_b64: str) -> dict:
@@ -294,8 +298,17 @@ def save_variant_rules(file_id: str, rules: dict) -> dict:
         raise ValueError("Правила варіантів доступні лише для DOCX")
 
     path = _require_path(entry)
-    edit_html, meta = document_service.save_rules_and_refresh(path, rules)
-    return {"edit_html": edit_html, "document_settings": meta}
+    edit_html, preview_html, meta, edit_html_unchanged = document_service.save_rules_and_refresh(
+        path, rules
+    )
+    payload = {
+        "preview_html": preview_html,
+        "document_settings": meta,
+        "edit_html_unchanged": edit_html_unchanged,
+    }
+    if not edit_html_unchanged:
+        payload["edit_html"] = edit_html
+    return payload
 
 
 def save_file(
@@ -320,8 +333,7 @@ def save_file(
         if not html:
             raise ValueError("Для збереження DOCX потрібен HTML-вміст")
         document_settings = document_service.save_docx_content(path, html)
-        _, preview_html, _ = document_service.build_preview(path, extension, entry["name"])
-        edit_html, _ = document_service.build_edit_view(path)
+        preview_html, edit_html, document_settings = document_service.save_docx_views(path)
         entry["size"] = path.stat().st_size
         entry["updated_at"] = datetime.now(timezone.utc).isoformat()
         _manifest.update(entry)

@@ -1,13 +1,21 @@
 {
   "files": [
     {
-      "id": "84404ad6-fbc6-487d-99a2-202f34aff5bf",
-      "name": "КД_стандарт.docx",
-      "stored_name": "84404ad6-fbc6-487d-99a2-202f34aff5bf.docx",
-      "size": 96611,
+      "id": "2f33f6b4-ac58-40e6-b844-2ef898599097",
+      "name": "КД_+каско.docx",
+      "stored_name": "2f33f6b4-ac58-40e6-b844-2ef898599097.docx",
+      "size": 93931,
       "extension": ".docx",
-      "uploaded_at": "2026-07-21T15:07:49.644268+00:00",
-      "updated_at": "2026-07-21T15:47:18.958200+00:00"
+      "uploaded_at": "2026-07-26T09:12:37.513042+00:00",
+      "updated_at": "2026-07-26T09:16:07.905699+00:00"
+    },
+    {
+      "id": "91152c1f-439e-488a-a197-d6c54ec4a02d",
+      "name": "КД_стандарт.docx",
+      "stored_name": "91152c1f-439e-488a-a197-d6c54ec4a02d.docx",
+      "size": 166990,
+      "extension": ".docx",
+      "uploaded_at": "2026-07-25T08:36:34.715030+00:00"
     }
   ]
 }

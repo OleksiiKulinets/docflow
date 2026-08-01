@@ -121,3 +121,67 @@
 
 .tab-nav-item
   @include chrome-nav-tab
+
+// Document workspace busy overlay (tab switch, condition apply)
+.preview-panel.is-document-busy
+  .rules-panel,
+  .conditions-panel
+    pointer-events: none
+
+.workspace-busy-overlay
+  position: absolute
+  inset: 0
+  z-index: 40
+  display: flex
+  align-items: center
+  justify-content: center
+  padding: $space-3
+  background: color-mix(in srgb, var(--overlay-dim) 72%, transparent)
+  backdrop-filter: blur(1px)
+  pointer-events: none
+
+  &[hidden]
+    display: none !important
+
+.workspace-busy-card
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: $space-1
+  min-width: 220px
+  max-width: 320px
+  padding: $space-3
+  border: 1px solid $border
+  border-radius: $radius-md
+  background: $bg-panel
+  box-shadow: var(--shadow-md)
+
+.workspace-busy-spinner
+  width: 28px
+  height: 28px
+  border: 2px solid color-mix(in srgb, $accent 18%, $border)
+  border-top-color: $accent
+  border-radius: 50%
+  animation: workspace-busy-spin 0.75s linear infinite
+
+.workspace-busy-title
+  margin: 0
+  font: var(--weight-semibold) var(--text-body)/var(--leading-tight) $font
+  color: $text
+  text-align: center
+
+.workspace-busy-subtitle
+  margin: 0
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) $font
+  color: $text-secondary
+  text-align: center
+
+@keyframes workspace-busy-spin
+  to
+    transform: rotate(360deg)
+
+@media (prefers-reduced-motion: reduce)
+  .workspace-busy-spinner
+    animation: none
+    border-top-color: $accent
+    opacity: 0.85

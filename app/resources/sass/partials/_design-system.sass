@@ -80,6 +80,8 @@
   padding: $space-4 $space-3 $space-4
 
 .preview-panel.is-editable .docx-document.docx-editable:not(.docx-structure-mode)
+  user-select: text
+  -webkit-user-select: text
   border-radius: $radius-sm
   border: 1px solid $border-strong
   box-shadow: var(--shadow-md)
@@ -88,6 +90,8 @@
   cursor: default
   caret-color: transparent
   border-radius: $radius-sm
+  user-select: text
+  -webkit-user-select: text
 
   &:focus
     border-color: $border-strong

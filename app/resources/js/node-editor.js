@@ -4,9 +4,14 @@ const NodeEditor = (() => {
   let model = NodeModel.emptyModel();
   let selectedNodeId = null;
   let selectedBlockId = null;
-  let assignMode = false;
+  /** @type {null | 'block' | 'marquee' | 'text'} */
+  let assignTool = null;
   let assignHoverBlockId = null;
   let collapsedIds = new Set();
+  let assignedListExpanded = new Set();
+  let blockPickerFilter = "";
+  const ASSIGNED_COLLAPSE_THRESHOLD = 8;
+  const ASSIGNED_COLLAPSE_PREVIEW = 5;
 
   let treeEl = null;
   let variantsEl = null;
@@ -22,6 +27,13 @@ const NodeEditor = (() => {
   let boundEventsRoot = null;
   let previewClickBound = false;
   let treeDragBound = false;
+  let assignPointerDown = null;
+  let assignMarqueeEl = null;
+  let assignMarqueeActive = false;
+  let suppressAssignClick = false;
+  let assignSelectionListenerBound = false;
+  const ASSIGN_CLICK_DRAG_PX = 6;
+  const ASSIGN_TOOLS = ["block", "marquee", "text"];
   let dragNodeId = null;
   let activeDropTarget = null;
   let dragPointerActive = false;
@@ -53,8 +65,127 @@ const NodeEditor = (() => {
     return icons[type] || "•";
   }
 
+  function isAssignActive() {
+    return assignTool != null;
+  }
+
+  function assignToolHint() {
+    if (assignTool === "block") return uk("assignHintBlock");
+    if (assignTool === "marquee") return uk("assignHintMarquee");
+    if (assignTool === "text") return uk("assignHintText");
+    return uk("assignHintOff");
+  }
+
+  function assignToolStatus(tool = assignTool) {
+    if (tool === "block") return uk("assignStatusBlock");
+    if (tool === "marquee") return uk("assignStatusMarquee");
+    if (tool === "text") return uk("assignStatusText");
+    return uk("assignStatusOff");
+  }
+
+  function setAssignTool(tool) {
+    if (tool && !ASSIGN_TOOLS.includes(tool)) return;
+    assignTool = tool || null;
+    if (!assignTool) {
+      assignHoverBlockId = null;
+      finishAssignMarqueeDrag();
+      window.getSelection()?.removeAllRanges();
+    }
+    refreshHighlights();
+    syncAssignSpanButtonState();
+  }
+
+  function renderAssignModePicker(node) {
+    const tools = [
+      {
+        id: "block",
+        label: uk("assignToolBlock"),
+        desc: uk("assignModeBlockDesc"),
+        tip: uk("assignToolBlockTip"),
+      },
+      {
+        id: "marquee",
+        label: uk("assignToolMarquee"),
+        desc: uk("assignModeMarqueeDesc"),
+        tip: uk("assignToolMarqueeTip"),
+      },
+      {
+        id: "text",
+        label: uk("assignToolText"),
+        desc: uk("assignModeTextDesc"),
+        tip: uk("assignToolTextTip"),
+      },
+    ];
+
+    if (!isAssignActive()) {
+      return `
+        <div class="assign-mode-picker assign-mode-picker--idle">
+          <p class="assign-mode-picker-lead">${escapeHtml(uk("assignModeLead"))}</p>
+          <div class="assign-mode-cards" role="group" aria-label="${escapeAttr(uk("assignToolGroupAria"))}">
+            ${tools
+              .map(
+                (tool) => `
+              <button
+                type="button"
+                class="assign-mode-card"
+                data-assign-tool="${tool.id}"
+                title="${escapeAttr(tool.tip)}">
+                <span class="assign-mode-card-icon assign-mode-card-icon--${tool.id}" aria-hidden="true"></span>
+                <span class="assign-mode-card-text">
+                  <span class="assign-mode-card-title">${escapeHtml(tool.label)}</span>
+                  <span class="assign-mode-card-desc">${escapeHtml(tool.desc)}</span>
+                </span>
+              </button>`,
+              )
+              .join("")}
+          </div>
+        </div>`;
+    }
+
+    const toolButtons = tools
+      .map(
+        (tool) => `
+        <button
+          type="button"
+          class="assign-tool-btn${assignTool === tool.id ? " is-active" : ""}"
+          data-assign-tool="${tool.id}"
+          title="${escapeAttr(tool.tip)}"
+          aria-pressed="${assignTool === tool.id ? "true" : "false"}">
+          ${escapeHtml(tool.label)}
+        </button>`,
+      )
+      .join("");
+
+    return `
+      <div class="assign-mode-picker assign-mode-picker--active">
+        <div class="assign-mode-active-row">
+          <div class="assign-tool-switch" role="group" aria-label="${escapeAttr(uk("assignToolGroupAria"))}">
+            ${toolButtons}
+          </div>
+          <button type="button" class="btn btn-sm btn-ghost assign-mode-done" data-assign-tool-off title="${escapeAttr(uk("doneAssignTip"))}">${uk("doneAssign")}</button>
+        </div>
+        <p class="assign-mode-active-hint">${escapeHtml(assignToolHint())}</p>
+        ${
+          assignTool === "text"
+            ? `<button type="button" class="btn btn-sm btn-accent assign-mode-add-span" data-add-text-span data-add-text-span-to="${escapeHtml(node.id)}" disabled title="${escapeAttr(uk("addTextSpanTip"))}">${uk("addTextSpan")}</button>`
+            : ""
+        }
+      </div>`;
+  }
+
+  function countNodeContentItems(node) {
+    return NodeModel.getBlockIds(node).length + NodeModel.getContentSpans(node).length;
+  }
+
   function uk(key) {
     return UK()?.strings?.[key] || key;
+  }
+
+  function escapeAttr(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;");
   }
 
   function renderContextHelpCallout(node) {
@@ -207,7 +338,7 @@ const NodeEditor = (() => {
       return "";
     }
     if (NodeModel.supportsBlockContent(node)) {
-      const blockCount = NodeModel.getBlockIds(node).length;
+      const blockCount = NodeModel.getBlockIds(node).length + NodeModel.getContentSpans(node).length;
       return blockCount ? `${blockCount} ${uk("blocksCount")}` : uk("variantNoText");
     }
     return "";
@@ -284,20 +415,202 @@ const NodeEditor = (() => {
       </button>`;
   }
 
-  function collectNodeBlockIds(nodeId) {
+  function collectNodeContent(nodeId) {
     const node = NodeModel.getNode(model, nodeId);
-    if (!node) return [];
-    const ids = [];
+    if (!node) return { fullBlockIds: [], spanBlockIds: [], spans: [] };
+    const fullBlockIds = [];
+    const spanBlockIds = new Set();
+    const spans = [];
     function walk(current) {
-      ids.push(...NodeModel.getBlockIds(current));
+      fullBlockIds.push(...NodeModel.getBlockIds(current));
+      NodeModel.getContentSpans(current).forEach((span) => {
+        spans.push({
+          block_id: span.block_id,
+          start: span.start,
+          end: span.end,
+          text: span.text || "",
+        });
+        spanBlockIds.add(span.block_id);
+      });
       NodeModel.orderedChildren(model, current.id).forEach(walk);
     }
     walk(node);
-    return [...new Set(ids)];
+    return {
+      fullBlockIds: [...new Set(fullBlockIds)],
+      spanBlockIds: [...spanBlockIds],
+      spans,
+    };
+  }
+
+  function collectNodeBlockIds(nodeId) {
+    const { fullBlockIds, spanBlockIds } = collectNodeContent(nodeId);
+    return [...new Set([...fullBlockIds, ...spanBlockIds])];
   }
 
   function countBranchBlocks(branchId) {
-    return collectNodeBlockIds(branchId).length;
+    const { fullBlockIds, spans } = collectNodeContent(branchId);
+    return fullBlockIds.length + spans.length;
+  }
+
+  const ASSIGNED_SPAN_HIGHLIGHT = "docflow-assigned";
+
+  function clearAssignedSpanMarks(preview) {
+    if (!preview) return;
+    if (typeof CSS !== "undefined" && CSS.highlights) {
+      CSS.highlights.delete(ASSIGNED_SPAN_HIGHLIGHT);
+    }
+    preview.querySelectorAll("mark.docx-assigned-span").forEach((mark) => {
+      const parent = mark.parentNode;
+      if (!parent) return;
+      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+      parent.removeChild(mark);
+      parent.normalize?.();
+    });
+    preview.querySelectorAll("[data-block-id]").forEach((block) => {
+      block.classList.remove("docx-block--span-assigned");
+    });
+  }
+
+  function normalizeSpanOffsets(block, start, end) {
+    const textLen = (block.textContent || "").length;
+    if (!textLen || start >= end) return null;
+    const normStart = Math.max(0, Math.min(start, textLen));
+    const normEnd = Math.max(normStart, Math.min(end, textLen));
+    if (normStart >= normEnd) return null;
+    return { start: normStart, end: normEnd };
+  }
+
+  function getTextOffsetRange(root, start, end) {
+    const normalized = normalizeSpanOffsets(root, start, end);
+    if (!normalized) return null;
+    ({ start, end } = normalized);
+
+    const range = document.createRange();
+    let offset = 0;
+    let startSet = false;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const len = node.textContent.length;
+      if (!startSet && offset + len > start) {
+        range.setStart(node, Math.max(0, start - offset));
+        startSet = true;
+      }
+      if (startSet && offset + len >= end) {
+        range.setEnd(node, Math.min(len, end - offset));
+        return range.collapsed ? null : range;
+      }
+      offset += len;
+    }
+    if (startSet && !range.collapsed) return range;
+    return null;
+  }
+
+  function findSpanRangeByText(block, span) {
+    const text = block.textContent || "";
+    const snippet = (span.text || "").trim();
+    if (!snippet || !text.includes(snippet)) return null;
+
+    let idx = text.indexOf(snippet);
+    if (typeof span.start === "number") {
+      let bestIdx = idx;
+      let bestDist = Math.abs(idx - span.start);
+      while ((idx = text.indexOf(snippet, idx + 1)) >= 0) {
+        const dist = Math.abs(idx - span.start);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = idx;
+        }
+      }
+      idx = bestIdx;
+    }
+    return getTextOffsetRange(block, idx, idx + snippet.length);
+  }
+
+  function resolveSpanRange(block, span) {
+    return getTextOffsetRange(block, span.start, span.end) || findSpanRangeByText(block, span);
+  }
+
+  function alignRangeToTextBoundaries(range) {
+    const endContainer = range.endContainer;
+    const endOffset = range.endOffset;
+    if (endContainer.nodeType === Node.TEXT_NODE && endOffset < endContainer.textContent.length) {
+      endContainer.splitText(endOffset);
+      range.setEnd(endContainer, endOffset);
+    }
+
+    const startContainer = range.startContainer;
+    const startOffset = range.startOffset;
+    if (startContainer.nodeType === Node.TEXT_NODE && startOffset > 0) {
+      const after = startContainer.splitText(startOffset);
+      range.setStart(after, 0);
+    }
+  }
+
+  function wrapRangeAsAssignedSpan(range) {
+    alignRangeToTextBoundaries(range);
+    const mark = document.createElement("mark");
+    mark.className = "docx-assigned-span";
+    try {
+      range.surroundContents(mark);
+      return true;
+    } catch (_) {
+      try {
+        mark.appendChild(range.extractContents());
+        range.insertNode(mark);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+
+  function applySpanMarksToBlock(block, spans) {
+    [...spans]
+      .filter(({ start, end }) => start < end)
+      .sort((a, b) => b.start - a.start)
+      .forEach((span) => {
+        const range = resolveSpanRange(block, span);
+        if (!range) return;
+        wrapRangeAsAssignedSpan(range);
+      });
+  }
+
+  function canUseAssignedSpanHighlightApi() {
+    return typeof CSS !== "undefined" && CSS.highlights && typeof Highlight !== "undefined";
+  }
+
+  function applyAssignedSpanHighlights(preview, spansByBlock) {
+    const useHighlightApi = canUseAssignedSpanHighlightApi();
+    const ranges = [];
+    let expected = 0;
+
+    spansByBlock.forEach((blockSpans, blockId) => {
+      const el = preview.querySelector(`[data-block-id="${CSS.escape(blockId)}"]`);
+      if (!el) return;
+      el.classList.add("docx-block--span-assigned");
+      expected += blockSpans.length;
+      if (!useHighlightApi) return;
+      blockSpans.forEach((span) => {
+        const range = resolveSpanRange(el, span);
+        if (range) ranges.push(range);
+      });
+    });
+
+    if (useHighlightApi && ranges.length === expected && ranges.length > 0) {
+      CSS.highlights.set(ASSIGNED_SPAN_HIGHLIGHT, new Highlight(...ranges));
+      return;
+    }
+
+    if (useHighlightApi && CSS.highlights) {
+      CSS.highlights.delete(ASSIGNED_SPAN_HIGHLIGHT);
+    }
+
+    spansByBlock.forEach((blockSpans, blockId) => {
+      const el = preview.querySelector(`[data-block-id="${CSS.escape(blockId)}"]`);
+      if (!el) return;
+      applySpanMarksToBlock(el, blockSpans);
+    });
   }
 
   function getForkForBranch(branch) {
@@ -482,34 +795,17 @@ const NodeEditor = (() => {
       return;
     }
 
-    let hostSection = null;
-    let branches = [];
+    if (getVariantNavContext(node)) {
+      variantsEl.innerHTML = "";
+      variantsEl.hidden = true;
+      return;
+    }
 
-    if (isVariantBranch(node)) {
-      const nestedFork = findVariantFork(node);
-      if (nestedFork) {
-        hostSection = node;
-        branches = NodeModel.orderedChildren(model, nestedFork.id).filter(isVariantBranch);
-      } else {
-        const parent = getImmediateParentNode(node);
-        const fork = parent ? findVariantFork(parent) || (isVariantForkNode(parent) ? parent : null) : null;
-        if (fork) {
-          hostSection = getHostSectionForNode(node);
-          branches = NodeModel.orderedChildren(model, fork.id).filter(isVariantBranch);
-        }
-      }
-    } else if ((node.type === "section" && !node.condition) || node.type === "marker") {
-      hostSection = node;
-      const fork = findVariantFork(node);
-      if (fork) {
-        branches = NodeModel.orderedChildren(model, fork.id).filter(isVariantBranch);
-      } else {
+    if ((node.type === "section" && !node.condition) || node.type === "marker") {
+      if (!findVariantFork(node)) {
         variantsEl.hidden = false;
         variantsEl.innerHTML = `
           <div class="rules-variant-nav rules-variant-nav--setup">
-            <div class="rules-variant-nav-head">
-              <span class="rules-variant-nav-label">${uk("variantsNavLabel")}</span>
-            </div>
             ${renderNestedVariantsBlock(node)}
           </div>`;
         syncAddNodeHints();
@@ -517,15 +813,8 @@ const NodeEditor = (() => {
       }
     }
 
-    if (!branches.length) {
-      variantsEl.innerHTML = "";
-      variantsEl.hidden = true;
-      return;
-    }
-
-    variantsEl.hidden = false;
-    variantsEl.innerHTML = renderVariantContextNav(hostSection, branches);
-    syncAddNodeHints();
+    variantsEl.innerHTML = "";
+    variantsEl.hidden = true;
   }
 
   function renderEmptyState(message, hint = "", actionHtml = "") {
@@ -568,23 +857,42 @@ const NodeEditor = (() => {
     return `<button type="button" class="btn btn-sm btn-danger" data-delete-subtree="${escapeHtml(node.id)}" title="${escapeHtml(tip)}">${escapeHtml(label)}</button>`;
   }
 
-  function renderVariantContextNav(hostSection, branches) {
+  function getVariantNavContext(node) {
+    if (!node) return null;
+
+    let hostSection = null;
+    let branches = [];
+
+    if (isVariantBranch(node)) {
+      const nestedFork = findVariantFork(node);
+      if (nestedFork) {
+        hostSection = node;
+        branches = NodeModel.orderedChildren(model, nestedFork.id).filter(isVariantBranch);
+      } else {
+        const fork = getForkForBranch(node);
+        if (fork) {
+          hostSection = fork.parent_id ? NodeModel.getNode(model, fork.parent_id) : null;
+          branches = NodeModel.orderedChildren(model, fork.id).filter(isVariantBranch);
+        }
+      }
+    } else if ((node.type === "section" && !node.condition) || node.type === "marker") {
+      hostSection = node;
+      const fork = findVariantFork(node);
+      if (fork) {
+        branches = NodeModel.orderedChildren(model, fork.id).filter(isVariantBranch);
+      }
+    }
+
+    if (!branches.length || !hostSection) return null;
+    return { hostSection, branches };
+  }
+
+  function renderVariantNavPanel(hostSection, branches) {
     const fork = hostSection ? findVariantFork(hostSection) : null;
 
     return `
-      <div class="rules-variant-nav">
-        <div class="rules-variant-nav-head">
-          <span class="rules-variant-nav-label">${uk("variantsNavLabel")}</span>
-          <div class="rules-variant-nav-actions">
-            ${
-              fork
-                ? `<button type="button" class="btn btn-sm btn-danger" data-delete-variant-group="${escapeHtml(fork.id)}" title="${uk("deleteVariantGroupTip")}">${uk("deleteVariantGroup")}</button>`
-                : ""
-            }
-            ${hostSection ? renderAddChoiceBranchAction(hostSection) : ""}
-          </div>
-        </div>
-        <nav class="rules-context-tabs" aria-label="${escapeHtml(uk("variantGroupLabel"))}">
+      <div class="node-variant-nav-panel">
+        <nav class="rules-context-tabs node-variant-tabs" role="tablist" aria-label="${escapeAttr(uk("variantGroupLabel"))}">
           ${branches
             .map((branch) => {
               const detail = formatConditionDetail(branch);
@@ -594,7 +902,9 @@ const NodeEditor = (() => {
               return `
                 <button type="button"
                   class="rules-context-tab rules-context-tab--${tone} ${active ? "is-active" : ""}"
-                  data-select-node="${escapeHtml(branch.id)}">
+                  data-select-node="${escapeHtml(branch.id)}"
+                  role="tab"
+                  aria-selected="${active ? "true" : "false"}">
                   <span class="rules-context-tab-label">${escapeHtml(NodeModel.nodeLabel(branch))}</span>
                   ${
                     detail?.valueHuman
@@ -606,12 +916,28 @@ const NodeEditor = (() => {
             })
             .join("")}
         </nav>
-        ${
-          fork
-            ? `<div class="rules-variant-nav-foot">${renderVariantGroupFieldPicker(fork.id)}</div>`
-            : ""
-        }
+        <div class="node-variant-nav-panel-foot">
+          ${fork ? renderVariantGroupFieldPicker(fork.id) : ""}
+          <div class="node-variant-nav-panel-actions">
+            ${hostSection ? renderAddChoiceBranchAction(hostSection) : ""}
+            ${
+              fork
+                ? `<button type="button" class="node-danger-link" data-delete-variant-group="${escapeHtml(fork.id)}" title="${escapeAttr(uk("deleteVariantGroupTip"))}">${uk("deleteVariantGroupLink")}</button>`
+                : ""
+            }
+          </div>
+        </div>
       </div>`;
+  }
+
+  function renderVariantNavCard(node) {
+    const nav = getVariantNavContext(node);
+    if (!nav) return "";
+    return renderInspectorCard(
+      uk("variantsNavLabel"),
+      renderVariantNavPanel(nav.hostSection, nav.branches),
+      "node-inspector-card--variant-nav",
+    );
   }
 
   function renderEditorBreadcrumb(node) {
@@ -671,50 +997,6 @@ const NodeEditor = (() => {
       </dl>`;
   }
 
-  function renderExclusiveStructureView(sectionNode) {
-    const fork = findVariantFork(sectionNode);
-    if (!fork) return "";
-    const branches = NodeModel.orderedChildren(model, fork.id).filter(isVariantBranch);
-    const field = branches[0] ? formatConditionDetail(branches[0]) : null;
-
-    return `
-      <section class="node-exclusive-structure">
-        <div class="node-exclusive-structure-head">
-          <h4 class="node-exclusive-structure-heading">${uk("structureTreeTitle")}</h4>
-          <button type="button" class="btn btn-sm btn-danger" data-delete-variant-group="${escapeHtml(fork.id)}" title="${uk("deleteVariantGroupTip")}">${uk("deleteVariantGroup")}</button>
-        </div>
-        <p class="node-exclusive-structure-section-name">${escapeHtml(NodeModel.nodeLabel(sectionNode))}</p>
-        <ul class="node-exclusive-structure-tree">
-          ${branches
-            .map((branch) => {
-              const detail = formatConditionDetail(branch);
-              const blocks = countBranchBlocks(branch.id);
-              const tone = getBranchTone(branch);
-              const selected = selectedNodeId === branch.id;
-              return `
-                <li class="node-exclusive-structure-item node-exclusive-structure-item--${tone} ${selected ? "is-selected" : ""}">
-                  <button type="button" class="node-exclusive-structure-row" data-select-node="${escapeHtml(branch.id)}">
-                    <span class="node-exclusive-structure-label">Варіант: <strong>${escapeHtml(NodeModel.nodeLabel(branch))}</strong></span>
-                    <span class="node-exclusive-structure-condition">
-                      ${
-                        detail?.field
-                          ? `Умова: ${escapeHtml(detail.field)} ${uk("conditionEquals")} ${escapeHtml(detail.valueHuman)}`
-                          : uk("emptyNoCondition")
-                      }
-                    </span>
-                    <span class="node-exclusive-structure-content">
-                      ${uk("contentBlocksLabel")}: ${blocks ? `${blocks}` : uk("emptyNoContent")}
-                    </span>
-                  </button>
-                </li>`;
-            })
-            .join("")}
-        </ul>
-        ${field?.field ? `<p class="node-exclusive-structure-foot">Умова документа: «${escapeHtml(field.field)}»</p>` : ""}
-        ${renderAddChoiceBranchAction(sectionNode)}
-      </section>`;
-  }
-
   function renderTemplateGuide(sectionId) {
     if (templateGuideSectionId !== sectionId) return "";
     return `
@@ -730,19 +1012,8 @@ const NodeEditor = (() => {
   }
 
   function renderVariantContentBody(branch) {
-    const contentNode = getVariantContentNode(branch.id);
-    const blocks = countBranchBlocks(branch.id);
-
-    if (!blocks) {
-      return renderEmptyState(
-        uk("emptyNoContent"),
-        uk("emptyAddDocBlockHint"),
-        `<button type="button" class="btn btn-sm btn-accent" data-branch-bind-content="${escapeHtml(branch.id)}">${uk("addFromDoc")}</button>`,
-      );
-    }
-
-    const target = contentNode || getOrCreateBranchParagraph(branch.id);
-    return renderBlockPicker(target);
+    const target = getVariantContentNode(branch.id) || branch;
+    return renderContentAssignPanel(target);
   }
 
   function renderVariantContentSection(branch) {
@@ -768,16 +1039,15 @@ const NodeEditor = (() => {
         ${renderSimpleConditionEditor(branch)}
       </div>`;
 
-    const subVariantsBody = findVariantFork(branch)
-      ? renderExclusiveStructureView(branch)
-      : renderNestedVariantsBlock(branch);
+    const setupVariantsBody = findVariantFork(branch) ? "" : renderNestedVariantsBlock(branch);
 
     return `
+      ${renderVariantNavCard(branch)}
       ${renderContextHelpCallout(branch)}
       ${previewHint}
       ${renderInspectorCard(uk("inspectorTitle"), propertiesBody, "node-inspector-card--properties")}
       ${renderInspectorCard(uk("contentLegend"), renderVariantContentBody(branch), "node-inspector-card--content")}
-      ${subVariantsBody ? renderInspectorCard(uk("subVariantsTitle"), subVariantsBody, "node-inspector-card--variants") : ""}
+      ${setupVariantsBody ? renderInspectorCard(uk("subVariantsTitle"), setupVariantsBody, "node-inspector-card--variants") : ""}
       ${renderChildrenCard(branch)}`;
   }
 
@@ -806,6 +1076,8 @@ const NodeEditor = (() => {
 
   function renderSectionInspector(section) {
     const fork = findVariantFork(section);
+    const canAssign = sectionCanAssignContent(section);
+    const contentNode = canAssign ? getOrCreateBranchParagraph(section.id) : null;
 
     const propertiesBody = `
       ${renderInspectorMetaPanel(section)}
@@ -816,14 +1088,31 @@ const NodeEditor = (() => {
         <input type="text" class="node-input" data-node-prop="metadata.label" value="${escapeHtml(section.metadata?.label || "")}" placeholder="${uk("labelPlaceholder")}">
       </label>`;
 
-    return `
-      ${renderInspectorCard(
-        uk("inspectorTitle"),
-        propertiesBody,
-        "node-inspector-card--properties",
-        renderContainerDeleteAction(section),
-      )}
-      ${renderChildrenCard(section)}`;
+    let body = renderVariantNavCard(section);
+
+    body += renderInspectorCard(
+      uk("inspectorTitle"),
+      propertiesBody,
+      "node-inspector-card--properties",
+      renderContainerDeleteAction(section),
+    );
+
+    if (contentNode) {
+      body += renderInspectorCard(
+        uk("contentLegend"),
+        renderBlockPicker(contentNode),
+        "node-inspector-card--content",
+      );
+    } else if (fork) {
+      body += renderInspectorCard(
+        uk("contentLegend"),
+        `<p class="node-inspector-hint">${uk("selectVariantHint")}</p>`,
+        "node-inspector-card--content",
+      );
+    }
+
+    body += renderChildrenCard(section);
+    return body;
   }
 
   function getOrCreateBranchParagraph(branchId) {
@@ -831,6 +1120,27 @@ const NodeEditor = (() => {
       if (child.type === "paragraph") return child;
     }
     return NodeModel.addNode(model, { type: "paragraph", parentId: branchId });
+  }
+
+  function sectionCanAssignContent(section) {
+    if (!section || section.type !== "section" || section.condition) return false;
+    if (isVariantForkNode(section)) return false;
+    if (findVariantFork(section)) return false;
+    return true;
+  }
+
+  function getContentTargetNode(containerId) {
+    const node = NodeModel.getNode(model, containerId);
+    if (!node) return null;
+    if (NodeModel.supportsBlockContent(node)) return node;
+    if (isVariantBranch(node)) return getOrCreateBranchParagraph(node.id);
+    if (node.type === "section" && !node.condition && sectionCanAssignContent(node)) {
+      return getOrCreateBranchParagraph(node.id);
+    }
+    if (node.type === "marker" && !findVariantFork(node)) {
+      return getOrCreateBranchParagraph(node.id);
+    }
+    return null;
   }
 
   function renderMarkerInspector(marker) {
@@ -862,34 +1172,18 @@ const NodeEditor = (() => {
 
     const fork = findVariantFork(containerNode);
     const parentForAdd = containerNode.id;
-    const isBranch = isVariantBranch(containerNode);
-    const title = isBranch ? uk("subVariantsTitle") : uk("variantsTitle");
-    const yesLabel = isBranch ? uk("addSubVariantYesNo") : uk("addYesNoVariants");
-    const yesSub = isBranch ? uk("addSubVariantYesNoSub") : uk("addYesNoVariantsSub");
-    const choiceLabel = isBranch ? uk("addSubVariantChoice") : uk("addChoiceVariants");
-    const choiceSub = isBranch ? uk("addSubVariantChoiceSub") : uk("addChoiceVariantsSub");
 
     if (!fork) {
+      const fieldId = getVariantFieldPickerValue();
+      const field = fieldId ? NodeModel.getField(model, fieldId) : null;
       return `
         <div class="node-variants-panel">
-          ${renderVariantFieldPicker()}
-          <div class="node-variants-quick">
-            <button type="button" class="node-variant-quick-btn node-variant-quick-btn--yes" data-add-yes-no-to="${escapeHtml(parentForAdd)}">
-              <strong>${escapeHtml(yesLabel)}</strong>
-              <span>${escapeHtml(yesSub)}</span>
-            </button>
-            <button type="button" class="node-variant-quick-btn node-variant-quick-btn--choice" data-add-choice-to="${escapeHtml(parentForAdd)}">
-              <strong>${escapeHtml(choiceLabel)}</strong>
-              <span>${escapeHtml(choiceSub)}</span>
-            </button>
-          </div>
+          ${renderVariantFieldPicker(parentForAdd)}
+          ${field ? renderVariantFieldPreview(field) : ""}
         </div>`;
     }
 
-    return `
-      ${renderExclusiveStructureView(containerNode)}
-      ${renderAddChoiceBranchAction(containerNode)}
-      ${isBranch ? `<p class="node-inspector-hint">${uk("selectSubVariantHint")}</p>` : `<p class="node-inspector-hint">${uk("selectVariantHint")}</p>`}`;
+    return "";
   }
 
   function renderVariantsPanel(node) {
@@ -1051,8 +1345,15 @@ const NodeEditor = (() => {
   function stripRulesEditorDecorationsFromPreview() {
     const preview = getPreviewEl();
     if (!preview) return;
-    preview.classList.remove("is-assign-mode");
-    preview.querySelector(".docx-canvas")?.classList.remove("is-assign-mode");
+    preview.classList.remove("is-assign-mode", "is-assign-block-mode", "is-assign-marquee-mode", "is-assign-text-mode");
+    preview.querySelector(".docx-canvas")?.classList.remove(
+      "is-assign-mode",
+      "is-assign-block-mode",
+      "is-assign-marquee-mode",
+      "is-assign-text-mode",
+    );
+    preview.querySelector(".docx-document")?.classList.remove("is-text-select-mode");
+    clearAssignedSpanMarks(preview);
     preview.querySelectorAll("[data-block-id]").forEach((block) => {
       block.classList.remove(
         "docx-block--selected",
@@ -1087,7 +1388,7 @@ const NodeEditor = (() => {
     return String(rawValue);
   }
 
-  function refreshHighlights() {
+  function refreshHighlights({ scrollToBlocks = false } = {}) {
     const preview = getPreviewEl();
     if (!preview) return;
 
@@ -1098,31 +1399,58 @@ const NodeEditor = (() => {
     }
 
     stripConditionOverlayFromPreview();
+    clearAssignedSpanMarks(preview);
 
     preview.querySelectorAll("[data-block-id]").forEach((block) => {
       block.classList.remove(
         "docx-block--selected",
         "docx-block--assign-target",
         "docx-block--assign-hover",
+        "docx-block--marquee-candidate",
       );
     });
-    preview.classList.toggle("is-assign-mode", Boolean(assignMode));
-    preview.querySelector(".docx-canvas")?.classList.toggle("is-assign-mode", Boolean(assignMode));
+    preview.classList.toggle("is-assign-mode", assignTool === "block" || assignTool === "marquee");
+    preview.classList.toggle("is-assign-block-mode", assignTool === "block");
+    preview.classList.toggle("is-assign-marquee-mode", assignTool === "marquee");
+    preview.classList.toggle("is-assign-text-mode", assignTool === "text");
+    const canvas = preview.querySelector(".docx-canvas");
+    const documentEl = preview.querySelector(".docx-document");
+    canvas?.classList.toggle("is-assign-mode", assignTool === "block" || assignTool === "marquee");
+    canvas?.classList.toggle("is-assign-block-mode", assignTool === "block");
+    canvas?.classList.toggle("is-assign-marquee-mode", assignTool === "marquee");
+    canvas?.classList.toggle("is-assign-text-mode", assignTool === "text");
+    documentEl?.classList.toggle("is-text-select-mode", assignTool === "text");
 
     if (selectedNodeId) {
       const rawNode = NodeModel.getNode(model, selectedNodeId);
       const node = rawNode ? resolveInspectorNode(rawNode) || rawNode : null;
       if (node) {
-        const blockIds = collectNodeBlockIds(node.id);
+        const { fullBlockIds, spans } = collectNodeContent(node.id);
+        const fullBlockSet = new Set(fullBlockIds);
+        const spansByBlock = new Map();
+        spans.forEach((span) => {
+          if (fullBlockSet.has(span.block_id)) return;
+          if (!spansByBlock.has(span.block_id)) spansByBlock.set(span.block_id, []);
+          spansByBlock.get(span.block_id).push(span);
+        });
+
         let firstEl = null;
-        blockIds.forEach((blockId) => {
+        fullBlockSet.forEach((blockId) => {
           const el = preview.querySelector(`[data-block-id="${CSS.escape(blockId)}"]`);
           if (el) {
             el.classList.add("docx-block--selected");
             if (!firstEl) firstEl = el;
           }
         });
-        if (firstEl && blockIds.length) {
+        spansByBlock.forEach((blockSpans, blockId) => {
+          const el = preview.querySelector(`[data-block-id="${CSS.escape(blockId)}"]`);
+          if (!el) return;
+          if (!firstEl) firstEl = el;
+        });
+        applyAssignedSpanHighlights(preview, spansByBlock);
+
+        const highlightCount = fullBlockSet.size + spansByBlock.size;
+        if (scrollToBlocks && firstEl && highlightCount) {
           firstEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
         }
       }
@@ -1134,7 +1462,7 @@ const NodeEditor = (() => {
         ?.classList.add("docx-block--selected");
     }
 
-    if (assignMode) {
+    if (assignTool === "block" || assignTool === "marquee") {
       preview.querySelectorAll("[data-block-id]").forEach((block) => {
         block.classList.add("docx-block--assign-target");
       });
@@ -1143,6 +1471,23 @@ const NodeEditor = (() => {
           .querySelector(`[data-block-id="${CSS.escape(assignHoverBlockId)}"]`)
           ?.classList.add("docx-block--assign-hover");
       }
+    }
+  }
+
+  function setAssignHoverBlock(blockId) {
+    if (assignHoverBlockId === blockId) return;
+    const preview = getPreviewEl();
+    if (!preview) return;
+    if (assignHoverBlockId) {
+      preview
+        .querySelector(`[data-block-id="${CSS.escape(assignHoverBlockId)}"]`)
+        ?.classList.remove("docx-block--assign-hover");
+    }
+    assignHoverBlockId = blockId;
+    if (blockId) {
+      preview
+        .querySelector(`[data-block-id="${CSS.escape(blockId)}"]`)
+        ?.classList.add("docx-block--assign-hover");
     }
   }
 
@@ -1210,18 +1555,114 @@ const NodeEditor = (() => {
     preferredFieldId = newFieldId;
     notifyChange();
     onStatus(`${uk("changeVariantGroupCondition")}: «${result.field?.label || newFieldId}»`);
-    renderEditorContextStrip();
-    renderInspector();
-    renderTree();
   }
 
   function renderVariantFieldOptions(fields, selectedId) {
     return fields
       .map((field) => {
-        const kind = field.type === "boolean" ? "Так/Ні" : "список";
+        const kind =
+          field.type === "boolean"
+            ? "Так/Ні"
+            : field.type === "choice"
+              ? "список"
+              : field.type || "умова";
         return `<option value="${escapeHtml(field.id)}" ${field.id === selectedId ? "selected" : ""}>${escapeHtml(field.label || field.id)} (${kind})</option>`;
       })
       .join("");
+  }
+
+  function getFieldVariantOptions(field) {
+    if (!field) return [];
+    if (field.type === "boolean") {
+      return [
+        { label: uk("branchYes"), tone: "yes" },
+        { label: uk("branchNo"), tone: "no" },
+      ];
+    }
+    if (field.type === "choice") {
+      return (field.options || []).map((opt, index) => ({
+        label: opt.label || opt.value || `Варіант ${index + 1}`,
+        tone: "choice",
+      }));
+    }
+    return [];
+  }
+
+  function renderVariantFieldPreview(field) {
+    const options = getFieldVariantOptions(field);
+    if (!options.length) {
+      return `<p class="node-variant-no-fields">${uk("variantUnsupportedField")}</p>`;
+    }
+    return `
+      <div class="node-variant-preview">
+        <p class="node-variant-preview-label">${uk("variantPreviewLabel")}</p>
+        <nav class="rules-context-tabs node-variant-tabs node-variant-preview-tabs" aria-label="${escapeAttr(uk("variantPreviewLabel"))}">
+          ${options
+            .map(
+              (opt) => `
+            <span class="rules-context-tab rules-context-tab--${escapeHtml(opt.tone)} node-variant-preview-tab">
+              <span class="rules-context-tab-label">${escapeHtml(opt.label)}</span>
+            </span>`,
+            )
+            .join("")}
+        </nav>
+      </div>`;
+  }
+
+  function variantKindForField(field) {
+    if (!field) return null;
+    if (field.type === "boolean") return "yes-no";
+    if (field.type === "choice") return "choice";
+    return null;
+  }
+
+  function createVariantsFromField(parentId, fieldId, { quiet = false } = {}) {
+    if (!parentId || !fieldId) return false;
+    const parent = NodeModel.getNode(model, parentId);
+    if (!parent || findVariantFork(parent)) return false;
+
+    const field = NodeModel.getField(model, fieldId);
+    if (!field) return false;
+
+    preferredFieldId = fieldId;
+
+    if (parent.type === "marker" && field.type === "boolean") {
+      if (typeof NodeTemplates.ensureMarkerFork === "function") {
+        const result = NodeTemplates.ensureMarkerFork(model, parentId, { fieldId });
+        if (result) {
+          selectedNodeId = result.yes?.id || parentId;
+          expandToNode(selectedNodeId);
+          if (!quiet) {
+            onStatus(uk("variantAutoCreated").replace("{label}", field.label || fieldId));
+          }
+          return true;
+        }
+      }
+      return false;
+    }
+
+    const kind = variantKindForField(field);
+    if (!kind) {
+      if (!quiet) onStatus(uk("variantUnsupportedField"), true);
+      return false;
+    }
+
+    const created = addNodeFromPicker(kind, parentId, { fieldId });
+    if (created && !quiet) {
+      onStatus(uk("variantAutoCreated").replace("{label}", field.label || fieldId));
+    }
+    return Boolean(created);
+  }
+
+  function ensureSelectedNodeVariants() {
+    const rawNode = selectedNodeId ? NodeModel.getNode(model, selectedNodeId) : null;
+    const node = rawNode ? resolveInspectorNode(rawNode) || rawNode : null;
+    if (!node || findVariantFork(node)) return false;
+    if (node.type !== "section" && node.type !== "marker") return false;
+    if (node.type === "section" && node.condition) return false;
+    const fieldId = getVariantFieldPickerValue();
+    if (!fieldId) return false;
+    return createVariantsFromField(node.id, fieldId, { quiet: true });
   }
 
   function renderVariantGroupFieldPicker(forkId) {
@@ -1275,16 +1716,17 @@ const NodeEditor = (() => {
     return { fieldId };
   }
 
-  function renderVariantFieldPicker() {
+  function renderVariantFieldPicker(parentId = "") {
     const fields = model.fields || [];
     if (!fields.length) {
       return `<p class="node-variant-no-fields">${uk("variantsNeedCondition")}</p>`;
     }
     const currentId = preferredFieldId || fields.find((f) => f.type === "boolean")?.id || fields[0].id;
+    const setupAttr = parentId ? ` data-variant-setup-field="${escapeHtml(parentId)}"` : "";
     return `
       <label class="node-field node-variant-field-picker">
         <span class="node-field-label">${uk("pickConditionForVariants")}</span>
-        <select class="node-input" id="node-variant-field-picker">
+        <select class="node-input" id="node-variant-field-picker"${setupAttr}>
           ${renderVariantFieldOptions(fields, currentId)}
         </select>
       </label>`;
@@ -1444,68 +1886,191 @@ const NodeEditor = (() => {
 
   function renderAssignedBlocks(node) {
     const blockIds = NodeModel.getBlockIds(node);
-    if (!blockIds.length) {
+    const spans = NodeModel.getContentSpans(node);
+    const items = [
+      ...blockIds.map((blockId) => ({
+        kind: "block",
+        key: blockId,
+        blockId,
+        label: truncate(blockPreview(blockId), 56),
+      })),
+      ...spans.map((span) => ({
+        kind: "span",
+        key: span.id,
+        blockId: span.block_id,
+        label: truncate(span.text || blockPreview(span.block_id), 56),
+        spanId: span.id,
+      })),
+    ];
+
+    if (!items.length) {
       return `<p class="node-inspector-hint">${uk("blocksEmpty")}</p>`;
     }
 
-    return `
-      <ul class="logic-blocks-list">
-        ${blockIds
-          .map(
-            (blockId) => `
-          <li class="logic-block-chip">
-            <button type="button" class="logic-block-chip-main" data-focus-block="${escapeHtml(blockId)}">
-              <span class="node-block-chip-id">${escapeHtml(blockId)}</span>
-              ${escapeHtml(truncate(blockPreview(blockId), 56))}
+    const canCollapse = items.length > ASSIGNED_COLLAPSE_THRESHOLD;
+    const expanded = assignedListExpanded.has(node.id);
+    const visibleItems = canCollapse && !expanded ? items.slice(0, ASSIGNED_COLLAPSE_PREVIEW) : items;
+    const hiddenCount = canCollapse && !expanded ? items.length - visibleItems.length : 0;
+
+    const listHtml = visibleItems
+      .map((item) => {
+        const isSpan = item.kind === "span";
+        const removeAttrs = isSpan
+          ? `data-remove-node-span="${escapeHtml(node.id)}" data-span-id="${escapeHtml(item.spanId)}"`
+          : `data-remove-node-block="${escapeHtml(node.id)}" data-block-id="${escapeHtml(item.blockId)}"`;
+        const typeLabel = isSpan ? uk("textSpanBadge") : escapeHtml(item.blockId);
+        return `
+          <li class="logic-block-chip ${isSpan ? "logic-block-chip--span" : ""}">
+            <button type="button" class="logic-block-chip-main" data-focus-block="${escapeHtml(item.blockId)}">
+              <span class="node-block-chip-id">${typeLabel}</span>
+              ${escapeHtml(item.label)}
             </button>
-            <button type="button" class="logic-block-chip-remove" data-remove-node-block="${escapeHtml(node.id)}" data-block-id="${escapeHtml(blockId)}" title="${uk("removeBlock")}">×</button>
-          </li>`,
-          )
-          .join("")}
-      </ul>`;
+            <button type="button" class="logic-block-chip-remove" ${removeAttrs} title="${uk("removeBlock")}">×</button>
+          </li>`;
+      })
+      .join("");
+
+    const toggleHtml =
+      canCollapse && hiddenCount
+        ? `<button type="button" class="logic-blocks-toggle btn btn-sm btn-ghost" data-toggle-assigned-list="${escapeHtml(node.id)}">
+            ${uk("showMoreBlocks").replace("{n}", String(hiddenCount))}
+          </button>`
+        : canCollapse && expanded
+          ? `<button type="button" class="logic-blocks-toggle btn btn-sm btn-ghost" data-toggle-assigned-list="${escapeHtml(node.id)}">
+              ${uk("showLessBlocks")}
+            </button>`
+          : "";
+
+    return `
+      <div class="logic-blocks-wrap ${canCollapse && !expanded ? "is-collapsed" : ""}">
+        <ul class="logic-blocks-list">${listHtml}</ul>
+        ${toggleHtml}
+      </div>`;
+  }
+
+  function buildBlockPreviewIndex(preview) {
+    const index = new Map();
+    if (!preview) return index;
+    preview.querySelectorAll("[data-block-id]").forEach((el) => {
+      const id = el.getAttribute("data-block-id");
+      if (id) index.set(id, el);
+    });
+    return index;
+  }
+
+  function blockPreviewFromIndex(index, blockId) {
+    const el = index.get(blockId);
+    if (!el) return blockId;
+    const text = (el.textContent || "").replace(/\s+/g, " ").trim();
+    return text || blockId;
   }
 
   function renderBlockPicker(node) {
-    const preview = getPreviewEl();
-    const assigned = NodeModel.getBlockIds(node);
+    return renderContentAssignPanel(node);
+  }
+
+  function renderDocBlocksSection(node, preview, blockIndex, blockPreviewCached) {
+    const assignedSet = new Set(NodeModel.getAllContentBlockIds(node));
     const allBlocks = NodeBlocks.listPreviewBlockIds(preview);
-    const available = allBlocks.filter((blockId) => !assigned.includes(blockId));
+    const available = allBlocks.filter((blockId) => !assignedSet.has(blockId));
+    const query = blockPickerFilter.trim().toLowerCase();
+    const filteredAvailable = query
+      ? available.filter((blockId) => {
+          const haystack = `${blockId} ${blockPreviewCached(blockId)}`.toLowerCase();
+          return haystack.includes(query);
+        })
+      : available;
+    const { tableGroups, standalone } = NodeBlocks.groupAvailableBlocks(preview, filteredAvailable);
+    const assignedCount = countNodeContentItems(node);
+    const openDocList = isAssignActive() || assignedCount > 0 || available.length <= 12 || Boolean(query);
+
+    const renderBlockPickerItem = (blockId) => `
+      <li class="node-block-picker-item">
+        <button type="button" class="node-block-picker-add" data-add-block-to="${escapeHtml(node.id)}" data-block-id="${escapeHtml(blockId)}" title="${escapeAttr(uk("addBlockFromListTip"))}">
+          <span class="node-block-picker-id">${escapeHtml(blockId)}</span>
+          <span class="node-block-picker-snippet">${escapeHtml(truncate(blockPreviewCached(blockId), 72))}</span>
+        </button>
+      </li>`;
+
+    const filterHtml =
+      available.length > 12
+        ? `<label class="node-block-filter">
+            <span class="visually-hidden">${uk("filterBlocks")}</span>
+            <input type="search" class="input input-sm node-block-filter-input" data-block-picker-filter value="${escapeHtml(blockPickerFilter)}" placeholder="${uk("filterBlocksPlaceholder")}">
+          </label>`
+        : "";
+
+    const availableHtml = filteredAvailable.length
+      ? `<ul class="node-block-picker">
+          ${tableGroups
+            .map(
+              (group) => `
+            <li class="node-block-picker-group">
+              <button
+                type="button"
+                class="node-block-picker-table"
+                data-add-blocks-to="${escapeHtml(node.id)}"
+                data-block-ids="${escapeHtml(group.blockIds.join(","))}"
+                title="${uk("addTableBlocks")}">
+                <span class="node-block-picker-table-label">${uk("addTableBlocksLabel")} ${group.index}</span>
+                <span class="node-block-picker-table-meta">${group.blockIds.length} ${uk("addTableBlocksMeta")} · ${uk("addTableBlocks")}</span>
+              </button>
+              <ul class="node-block-picker node-block-picker--nested">
+                ${group.blockIds.map((blockId) => renderBlockPickerItem(blockId)).join("")}
+              </ul>
+            </li>`,
+            )
+            .join("")}
+          ${standalone.map((blockId) => renderBlockPickerItem(blockId)).join("")}
+        </ul>`
+      : `<p class="node-inspector-hint node-doc-blocks-empty">${allBlocks.length ? (query ? uk("noBlocksMatchFilter") : uk("allBlocksAssigned")) : uk("noBlocksInDoc")}</p>`;
+
+    if (!available.length && !query) {
+      return "";
+    }
 
     return `
-      <div class="node-block-picker-root">
-        <div class="node-block-section">
-          <div class="node-block-section-head">${uk("assignedBlocks")}</div>
-          ${renderAssignedBlocks(node)}
-          <div class="node-inspector-actions">
-            <button type="button" class="btn btn-sm ${assignMode ? "" : "btn-accent"}" data-toggle-assign title="${uk("addFromDocTip")}">
-              ${assignMode ? uk("doneAssign") : uk("addFromDoc")}
-            </button>
-            ${
-              selectedBlockId && !assigned.includes(selectedBlockId)
-                ? `<button type="button" class="btn btn-sm" data-add-selected-block="${escapeHtml(node.id)}">${uk("addSelectedBlock")}</button>`
-                : ""
-            }
-          </div>
+      <details class="node-doc-blocks-details"${openDocList ? " open" : ""}>
+        <summary class="node-doc-blocks-summary">
+          <span class="node-doc-blocks-summary-label">${uk("docBlocks")}</span>
+          <span class="node-doc-blocks-summary-meta">${available.length}</span>
+        </summary>
+        <div class="node-doc-blocks-body">
+          <p class="node-doc-blocks-hint">${escapeHtml(uk("docBlocksHint"))}</p>
+          ${filterHtml}
+          ${availableHtml}
         </div>
+      </details>`;
+  }
 
-        <div class="node-block-section">
-          <div class="node-block-section-head">${uk("docBlocks")} (${available.length})</div>
-          ${
-            available.length
-              ? `<ul class="node-block-picker">${available
-                  .map(
-                    (blockId) => `
-                <li class="node-block-picker-item">
-                  <button type="button" class="node-block-picker-add" data-add-block-to="${escapeHtml(node.id)}" data-block-id="${escapeHtml(blockId)}" title="Прив’язати цей блок до вузла">
-                    <span class="node-block-picker-id">${escapeHtml(blockId)}</span>
-                    <span class="node-block-picker-snippet">${escapeHtml(truncate(blockPreview(blockId), 72))}</span>
-                  </button>
-                </li>`,
-                  )
-                  .join("")}</ul>`
-              : `<p class="node-inspector-hint">${allBlocks.length ? uk("allBlocksAssigned") : uk("noBlocksInDoc")}</p>`
-          }
-        </div>
+  function renderContentAssignPanel(node) {
+    const preview = getPreviewEl();
+    const blockIndex = buildBlockPreviewIndex(preview);
+    const blockPreviewCached = (blockId) => blockPreviewFromIndex(blockIndex, blockId);
+    const assignedSet = new Set(NodeModel.getAllContentBlockIds(node));
+    const assignedCount = countNodeContentItems(node);
+    const hasAssigned = assignedCount > 0;
+
+    return `
+      <div class="node-content-assign-panel">
+        ${renderAssignModePicker(node)}
+        ${
+          hasAssigned
+            ? `<section class="node-block-section node-block-section--assigned">
+                <div class="node-block-section-head">
+                  ${uk("assignedBlocks")}
+                  <span class="node-block-section-count">${assignedCount}</span>
+                </div>
+                ${renderAssignedBlocks(node)}
+              </section>`
+            : `<p class="node-content-assign-empty-note">${escapeHtml(uk("blocksEmptyShort"))}</p>`
+        }
+        ${
+          selectedBlockId && !assignedSet.has(selectedBlockId)
+            ? `<button type="button" class="btn btn-sm node-add-selected-block" data-add-selected-block="${escapeHtml(node.id)}">${uk("addSelectedBlock")}</button>`
+            : ""
+        }
+        ${renderDocBlocksSection(node, preview, blockIndex, blockPreviewCached)}
       </div>`;
   }
 
@@ -1627,12 +2192,6 @@ const NodeEditor = (() => {
       return;
     }
 
-    if (isVariantForkNode(rawNode) && rawNode.parent_id) {
-      selectedNodeId = rawNode.parent_id;
-      renderInspector();
-      return;
-    }
-
     const node = resolveInspectorNode(rawNode) || rawNode;
     const isBranch = isVariantBranch(node);
     const isPlainSection = node.type === "section" && !node.condition;
@@ -1669,6 +2228,7 @@ const NodeEditor = (() => {
   }
 
   function renderAll() {
+    ensureSelectedNodeVariants();
     renderFieldsPanel();
     renderTree();
     renderEditorContextStrip();
@@ -1677,20 +2237,32 @@ const NodeEditor = (() => {
     refreshHighlights();
     renderWorkflowHelpPanel();
     syncAddNodeHints();
+    syncAssignSpanButtonState();
+  }
+
+  function exitAssignMode() {
+    setAssignTool(null);
   }
 
   function openNodeEditor(nodeId, options = {}) {
     if (!nodeId) return;
     selectedNodeId = nodeId;
-    assignMode = false;
+    exitAssignMode();
     expandToNode(nodeId);
     navigateToPage("editor", options);
     renderAll();
   }
 
+  let renderAllScheduled = false;
+
   function notifyChange() {
     onModelChange();
-    renderAll();
+    if (renderAllScheduled) return;
+    renderAllScheduled = true;
+    requestAnimationFrame(() => {
+      renderAllScheduled = false;
+      renderAll();
+    });
   }
 
   function selectNodeByBlockId(blockId) {
@@ -1699,28 +2271,247 @@ const NodeEditor = (() => {
     const parent = owner.parent_id ? NodeModel.getNode(model, owner.parent_id) : null;
     selectedNodeId = parent && isVariantBranch(parent) ? parent.id : owner.id;
     selectedBlockId = blockId;
-    assignMode = false;
+    exitAssignMode();
     expandToNode(selectedNodeId);
     navigateToPage("editor");
     renderAll();
     return true;
   }
 
+  function resolveBlockAssignTargetNodeId(nodeId) {
+    const target = getContentTargetNode(nodeId);
+    return target?.id || null;
+  }
+
+  function isBlockAssignedToTargetNode(blockId, targetId) {
+    const node = NodeModel.getNode(model, targetId);
+    if (!node || !blockId) return false;
+    return (
+      NodeModel.getBlockIds(node).includes(blockId) ||
+      NodeModel.getContentSpans(node).some((span) => span.block_id === blockId)
+    );
+  }
+
   function addBlockToSelectedNode(blockId) {
     if (!selectedNodeId || !blockId) return false;
-    let targetId = selectedNodeId;
-    let node = NodeModel.getNode(model, targetId);
-    if (node && isVariantBranch(node)) {
-      const para = getOrCreateBranchParagraph(node.id);
-      if (!para) return false;
-      targetId = para.id;
-      node = para;
-    }
-    if (!node || !NodeModel.supportsBlockContent(node)) return false;
+    const targetId = resolveBlockAssignTargetNodeId(selectedNodeId);
+    if (!targetId) return false;
     if (!NodeModel.addBlockToNode(model, targetId, blockId)) return false;
     selectedBlockId = blockId;
     notifyChange();
     onStatus("Блок додано до варіанту");
+    return true;
+  }
+
+  function removeBlockFromSelectedNode(blockId) {
+    if (!selectedNodeId || !blockId) return false;
+    const targetId = resolveBlockAssignTargetNodeId(selectedNodeId);
+    if (!targetId) return false;
+    if (!isBlockAssignedToTargetNode(blockId, targetId)) return false;
+    NodeModel.removeBlockFromNode(model, targetId, blockId);
+    if (selectedBlockId === blockId) selectedBlockId = null;
+    notifyChange();
+    onStatus("Блок прибрано з варіанту");
+    return true;
+  }
+
+  function toggleBlockOnSelectedNode(blockId) {
+    if (!selectedNodeId || !blockId) return false;
+    const targetId = resolveBlockAssignTargetNodeId(selectedNodeId);
+    if (!targetId) return false;
+    if (isBlockAssignedToTargetNode(blockId, targetId)) {
+      return removeBlockFromSelectedNode(blockId);
+    }
+    return addBlockToSelectedNode(blockId);
+  }
+
+  function getCaretOffsetInBlock(block, container, offset) {
+    if (container.nodeType === Node.TEXT_NODE) {
+      let total = 0;
+      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (node === container) return total + offset;
+        total += node.textContent.length;
+      }
+    }
+    const preRange = document.createRange();
+    preRange.selectNodeContents(block);
+    preRange.setEnd(container, offset);
+    return preRange.toString().length;
+  }
+
+  function captureSelectionInBlock(previewEl) {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+
+    const range = sel.getRangeAt(0);
+    const startBlock = (
+      range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? range.startContainer
+        : range.startContainer.parentElement
+    )?.closest?.("[data-block-id]");
+    const endBlock = (
+      range.endContainer.nodeType === Node.ELEMENT_NODE
+        ? range.endContainer
+        : range.endContainer.parentElement
+    )?.closest?.("[data-block-id]");
+
+    if (!startBlock || !endBlock || startBlock !== endBlock || !previewEl?.contains(startBlock)) {
+      return null;
+    }
+
+    const selectedText = range.toString();
+    if (!selectedText.length || !selectedText.trim()) return null;
+
+    const blockText = startBlock.textContent || "";
+    const start = getCaretOffsetInBlock(startBlock, range.startContainer, range.startOffset);
+    const end = start + selectedText.length;
+
+    if (blockText.length > 0 && start <= 0 && end >= blockText.length) return null;
+
+    const normalizedBlock = blockText.replace(/\s+/g, " ").trim();
+    const normalizedSelected = selectedText.replace(/\s+/g, " ").trim();
+    if (normalizedBlock.length > 1 && normalizedSelected === normalizedBlock) return null;
+
+    return {
+      block_id: startBlock.getAttribute("data-block-id"),
+      start,
+      end,
+      text: selectedText,
+    };
+  }
+
+  function tryAssignSpanFromSelection(previewEl, { quiet = false } = {}) {
+    if (assignTool !== "text" || !selectedNodeId || !previewEl) return false;
+    const spanData = captureSelectionInBlock(previewEl);
+    if (!spanData) return false;
+
+    const targetId = resolveBlockAssignTargetNodeId(selectedNodeId);
+    if (!targetId) {
+      if (!quiet) {
+        onStatus("Оберіть варіант або розділ, до якого додати фрагмент", true);
+      }
+      return false;
+    }
+
+    const added = toggleSpanOnSelectedNode(spanData);
+    if (added) {
+      window.getSelection()?.removeAllRanges();
+      syncAssignSpanButtonState();
+    } else if (!quiet) {
+      onStatus("Не вдалося додати фрагмент тексту", true);
+    }
+    return added;
+  }
+
+  function syncAssignSpanButtonState() {
+    const preview = getPreviewEl();
+    const btn = shellEl?.querySelector("[data-add-text-span]");
+    if (!btn) return;
+    const spanData = assignTool === "text" && preview ? captureSelectionInBlock(preview) : null;
+    btn.disabled = !spanData;
+    if (spanData?.text) {
+      btn.title = truncate(spanData.text.replace(/\s+/g, " ").trim(), 120);
+    } else {
+      btn.title = uk("addTextSpanTip");
+    }
+  }
+
+  function bindAssignSelectionListener(previewEl) {
+    if (assignSelectionListenerBound) return;
+    assignSelectionListenerBound = true;
+    document.addEventListener("selectionchange", () => {
+      if (!getIsActive() || assignTool !== "text") return;
+      syncAssignSpanButtonState();
+    });
+  }
+
+  function addSpanToSelectedNode(spanData) {
+    if (!selectedNodeId || !spanData?.block_id) return false;
+    const targetId = resolveBlockAssignTargetNodeId(selectedNodeId);
+    if (!targetId) return false;
+    if (!NodeModel.addSpanToNode(model, targetId, spanData)) return false;
+    selectedBlockId = spanData.block_id;
+    notifyChange();
+    onStatus("Фрагмент тексту додано до варіанту");
+    return true;
+  }
+
+  function findMatchingContentSpan(targetId, spanData) {
+    const node = NodeModel.getNode(model, targetId);
+    if (!node) return null;
+    return NodeModel.getContentSpans(node).find(
+      (span) =>
+        span.block_id === spanData.block_id &&
+        span.start === spanData.start &&
+        span.end === spanData.end,
+    );
+  }
+
+  function toggleSpanOnSelectedNode(spanData) {
+    if (!selectedNodeId || !spanData?.block_id) return false;
+    const targetId = resolveBlockAssignTargetNodeId(selectedNodeId);
+    if (!targetId) return false;
+
+    const existing = findMatchingContentSpan(targetId, spanData);
+    if (existing) {
+      NodeModel.removeSpanFromNode(model, targetId, existing.id);
+      if (selectedBlockId === spanData.block_id) selectedBlockId = null;
+      notifyChange();
+      onStatus("Фрагмент прибрано з варіанту");
+      return true;
+    }
+
+    return addSpanToSelectedNode(spanData);
+  }
+
+  function toggleBlocksOnSelectedNode(blockIds) {
+    if (!selectedNodeId || !blockIds?.length) return false;
+    const targetId = resolveBlockAssignTargetNodeId(selectedNodeId);
+    if (!targetId) return false;
+
+    let added = 0;
+    let removed = 0;
+    blockIds.forEach((blockId) => {
+      if (isBlockAssignedToTargetNode(blockId, targetId)) {
+        if (NodeModel.removeBlockFromNode(model, targetId, blockId)) removed += 1;
+      } else if (NodeModel.addBlockToNode(model, targetId, blockId)) {
+        added += 1;
+      }
+    });
+
+    if (!added && !removed) return false;
+    if (selectedBlockId && blockIds.includes(selectedBlockId) && removed && !added) {
+      selectedBlockId = null;
+    } else if (blockIds.length) {
+      selectedBlockId = blockIds[blockIds.length - 1];
+    }
+    notifyChange();
+    if (added && removed) {
+      onStatus(`Додано ${added}, прибрано ${removed} блоків`);
+    } else if (removed) {
+      onStatus(removed === 1 ? "Блок прибрано з варіанту" : `Прибрано ${removed} блоків`);
+    } else {
+      onStatus(added === 1 ? "Блок додано до варіанту" : `Додано ${added} блоків до варіанту`);
+    }
+    return true;
+  }
+
+  function addBlocksToSelectedNode(blockIds) {
+    if (!selectedNodeId || !blockIds?.length) return false;
+    const targetId = resolveBlockAssignTargetNodeId(selectedNodeId);
+    if (!targetId) return false;
+
+    let added = 0;
+    blockIds.forEach((blockId) => {
+      if (NodeModel.addBlockToNode(model, targetId, blockId)) added += 1;
+    });
+
+    if (!added) return false;
+    selectedBlockId = blockIds[blockIds.length - 1];
+    notifyChange();
+    onStatus(added === 1 ? "Блок додано до варіанту" : `Додано ${added} блоків до варіанту`);
     return true;
   }
 
@@ -1737,22 +2528,184 @@ const NodeEditor = (() => {
     refreshHighlights();
   }
 
+  function rectsIntersect(a, b) {
+    return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+  }
+
+  function ensureAssignMarqueeEl() {
+    if (assignMarqueeEl) return assignMarqueeEl;
+    assignMarqueeEl = document.createElement("div");
+    assignMarqueeEl.className = "docx-assign-marquee";
+    assignMarqueeEl.hidden = true;
+    document.body.appendChild(assignMarqueeEl);
+    return assignMarqueeEl;
+  }
+
+  function clientRectFromPoints(x1, y1, x2, y2) {
+    const left = Math.min(x1, x2);
+    const top = Math.min(y1, y2);
+    const right = Math.max(x1, x2);
+    const bottom = Math.max(y1, y2);
+    return { left, top, right, bottom, width: right - left, height: bottom - top };
+  }
+
+  function updateAssignMarqueeVisual(rect) {
+    const el = ensureAssignMarqueeEl();
+    if (!rect || rect.width < 2 || rect.height < 2) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.style.left = `${rect.left}px`;
+    el.style.top = `${rect.top}px`;
+    el.style.width = `${rect.width}px`;
+    el.style.height = `${rect.height}px`;
+  }
+
+  function hideAssignMarqueeVisual() {
+    if (assignMarqueeEl) assignMarqueeEl.hidden = true;
+  }
+
+  function clearMarqueeCandidates() {
+    getPreviewEl()
+      ?.querySelectorAll(".docx-block--marquee-candidate")
+      .forEach((block) => block.classList.remove("docx-block--marquee-candidate"));
+  }
+
+  function previewBlockIdsInClientRect(rect) {
+    const preview = getPreviewEl();
+    if (!preview || !rect || (rect.width < ASSIGN_CLICK_DRAG_PX && rect.height < ASSIGN_CLICK_DRAG_PX)) {
+      return [];
+    }
+    const ids = [];
+    preview.querySelectorAll("[data-block-id]").forEach((el) => {
+      const blockRect = el.getBoundingClientRect();
+      if (rectsIntersect(blockRect, rect)) {
+        const blockId = el.getAttribute("data-block-id");
+        if (blockId) ids.push(blockId);
+      }
+    });
+    return ids;
+  }
+
+  function setMarqueeCandidates(rect) {
+    const preview = getPreviewEl();
+    if (!preview) return;
+    clearMarqueeCandidates();
+    previewBlockIdsInClientRect(rect).forEach((blockId) => {
+      preview
+        .querySelector(`[data-block-id="${CSS.escape(blockId)}"]`)
+        ?.classList.add("docx-block--marquee-candidate");
+    });
+  }
+
+  function finishAssignMarqueeDrag() {
+    assignMarqueeActive = false;
+    hideAssignMarqueeVisual();
+    clearMarqueeCandidates();
+    getPreviewEl()?.classList.remove("is-assign-marquee-drag");
+  }
+
   function bindPreviewClicks(previewEl) {
     if (previewClickBound || !previewEl) return;
     previewClickBound = true;
+    bindAssignSelectionListener(previewEl);
+
+    previewEl.addEventListener("mousedown", (event) => {
+      if (!getIsActive() || event.button !== 0) return;
+      if (event.target.closest("button, a, input, select, textarea, label")) return;
+      if (assignTool !== "marquee" || !selectedNodeId) return;
+
+      assignPointerDown = { x: event.clientX, y: event.clientY };
+      assignMarqueeActive = false;
+      event.preventDefault();
+
+      const onMove = (moveEvent) => {
+        if (!assignPointerDown) return;
+
+        const dx = moveEvent.clientX - assignPointerDown.x;
+        const dy = moveEvent.clientY - assignPointerDown.y;
+        if (!assignMarqueeActive && dx * dx + dy * dy <= ASSIGN_CLICK_DRAG_PX * ASSIGN_CLICK_DRAG_PX) {
+          return;
+        }
+
+        if (!assignMarqueeActive) {
+          assignMarqueeActive = true;
+          previewEl.classList.add("is-assign-marquee-drag");
+          window.getSelection()?.removeAllRanges();
+        }
+
+        moveEvent.preventDefault();
+        const rect = clientRectFromPoints(
+          assignPointerDown.x,
+          assignPointerDown.y,
+          moveEvent.clientX,
+          moveEvent.clientY,
+        );
+        updateAssignMarqueeVisual(rect);
+        setMarqueeCandidates(rect);
+      };
+
+      const onUp = (upEvent) => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+
+        if (assignMarqueeActive && assignTool === "marquee" && selectedNodeId) {
+          const rect = clientRectFromPoints(
+            assignPointerDown.x,
+            assignPointerDown.y,
+            upEvent.clientX,
+            upEvent.clientY,
+          );
+          const blockIds = previewBlockIdsInClientRect(rect);
+          finishAssignMarqueeDrag();
+          suppressAssignClick = true;
+          assignPointerDown = null;
+          if (blockIds.length) {
+            toggleBlocksOnSelectedNode(blockIds);
+          }
+          return;
+        }
+
+        finishAssignMarqueeDrag();
+        assignPointerDown = null;
+      };
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
 
     previewEl.addEventListener("click", (event) => {
       if (!getIsActive()) return;
+      if (suppressAssignClick) {
+        suppressAssignClick = false;
+        return;
+      }
+
       const block = event.target.closest("[data-block-id]");
       if (!block) return;
 
       const blockId = block.getAttribute("data-block-id");
-      selectedBlockId = blockId;
 
-      if (assignMode && selectedNodeId) {
-        addBlockToSelectedNode(blockId);
+      if (assignTool === "block" && selectedNodeId) {
+        const preview = getPreviewEl();
+        const addWholeTable = event.ctrlKey || event.metaKey;
+        const tableBlockIds = addWholeTable
+          ? NodeBlocks.getTableBlockIdsForBlock(preview, blockId)
+          : [];
+        if (addWholeTable && tableBlockIds.length > 1) {
+          toggleBlocksOnSelectedNode(tableBlockIds);
+        } else {
+          toggleBlockOnSelectedNode(blockId);
+        }
         return;
       }
+
+      if (assignTool === "marquee" || assignTool === "text") {
+        return;
+      }
+
+      selectedBlockId = blockId;
 
       if (selectNodeByBlockId(blockId)) {
         onStatus(`Обрано вузол для блоку ${blockId}`);
@@ -1763,18 +2716,15 @@ const NodeEditor = (() => {
     });
 
     previewEl.addEventListener("mousemove", (event) => {
-      if (!getIsActive() || !assignMode) return;
+      if (!getIsActive() || assignTool !== "block" || assignMarqueeActive) return;
       const block = event.target.closest("[data-block-id]");
       const blockId = block?.getAttribute("data-block-id") || null;
-      if (blockId === assignHoverBlockId) return;
-      assignHoverBlockId = blockId;
-      refreshHighlights();
+      setAssignHoverBlock(blockId);
     });
 
     previewEl.addEventListener("mouseleave", () => {
-      if (!assignHoverBlockId) return;
-      assignHoverBlockId = null;
-      refreshHighlights();
+      if (assignMarqueeActive) return;
+      setAssignHoverBlock(null);
     });
   }
 
@@ -1987,6 +2937,13 @@ const NodeEditor = (() => {
     boundEventsRoot = root;
     eventsBound = true;
 
+    root.addEventListener("input", (event) => {
+      const filterInput = event.target.closest("[data-block-picker-filter]");
+      if (!filterInput) return;
+      blockPickerFilter = filterInput.value;
+      renderInspector();
+    });
+
     root.addEventListener("click", (event) => {
       const pageTab = event.target.closest("[data-rules-page]:not(.rules-page)");
       if (pageTab) {
@@ -2014,53 +2971,6 @@ const NodeEditor = (() => {
         return;
       }
 
-      const addYesNoBtn = event.target.closest("[data-add-yes-no-to]");
-      if (addYesNoBtn) {
-        const parentId = addYesNoBtn.dataset.addYesNoTo || null;
-        const parent = parentId ? NodeModel.getNode(model, parentId) : null;
-        if (parent?.type === "marker" && typeof NodeTemplates.ensureMarkerFork === "function") {
-          const resolved = resolveVariantFieldForKind("yes-no");
-          if (resolved.error) {
-            onStatus(resolved.error, true);
-            openFieldsPage();
-            return;
-          }
-          NodeTemplates.ensureMarkerFork(model, parentId, { fieldId: resolved.fieldId });
-          notifyChange();
-          onStatus("Гілки маркера Так/Ні створено");
-          return;
-        }
-        const resolved = resolveVariantFieldForKind("yes-no");
-        if (resolved.error) {
-          onStatus(resolved.error, true);
-          openFieldsPage();
-          return;
-        }
-        if (addNodeFromPicker("yes-no", parentId, { fieldId: resolved.fieldId })) {
-          notifyChange();
-          const label = NodeModel.getField(model, resolved.fieldId)?.label || "умова";
-          onStatus(`Варіанти Так/Ні прив’язано до «${label}»`);
-        }
-        return;
-      }
-
-      const addChoiceBtn = event.target.closest("[data-add-choice-to]");
-      if (addChoiceBtn) {
-        const parentId = addChoiceBtn.dataset.addChoiceTo || null;
-        const resolved = resolveVariantFieldForKind("choice");
-        if (resolved.error) {
-          onStatus(resolved.error, true);
-          openFieldsPage();
-          return;
-        }
-        if (addNodeFromPicker("choice", parentId, { fieldId: resolved.fieldId })) {
-          notifyChange();
-          const label = NodeModel.getField(model, resolved.fieldId)?.label || "умова";
-          onStatus(`Варіанти списку прив’язано до «${label}»`);
-        }
-        return;
-      }
-
       const addChoiceBranchBtn = event.target.closest("[data-add-choice-branch-to]");
       if (addChoiceBranchBtn) {
         const forkId = addChoiceBranchBtn.dataset.addChoiceBranchTo;
@@ -2085,19 +2995,13 @@ const NodeEditor = (() => {
         const picker = document.getElementById("node-variant-field-picker");
         if (picker) picker.value = preferredFieldId;
         onStatus(`Обрано умову: ${NodeModel.getField(model, preferredFieldId)?.label || preferredFieldId}`);
-        return;
-      }
-
-      const branchBindBtn = event.target.closest("[data-branch-bind-content]");
-      if (branchBindBtn) {
-        const branchId = branchBindBtn.dataset.branchBindContent;
-        const contentNode = getOrCreateBranchParagraph(branchId);
-        selectedNodeId = contentNode.id;
-        assignMode = true;
-        expandToNode(branchId);
-        renderInspector();
-        refreshHighlights();
-        onStatus("Наведіть на абзац у документі або оберіть блок зі списку «Блоки документа»");
+        const setupParentId = picker?.dataset.variantSetupField;
+        if (setupParentId && createVariantsFromField(setupParentId, preferredFieldId)) {
+          notifyChange();
+        } else if (setupParentId) {
+          renderEditorContextStrip();
+          renderInspector();
+        }
         return;
       }
 
@@ -2122,12 +3026,29 @@ const NodeEditor = (() => {
         return;
       }
 
-      const toggleAssign = event.target.closest("[data-toggle-assign]");
-      if (toggleAssign) {
-        assignMode = !assignMode;
+      const assignToolBtn = event.target.closest("[data-assign-tool]");
+      if (assignToolBtn) {
+        const tool = assignToolBtn.dataset.assignTool;
+        setAssignTool(tool);
         renderInspector();
-        refreshHighlights();
-        onStatus(assignMode ? "Клікніть абзац або оберіть блок зі списку нижче" : "Режим вибору вимкнено");
+        onStatus(assignToolStatus(tool));
+        return;
+      }
+
+      const assignToolOffBtn = event.target.closest("[data-assign-tool-off]");
+      if (assignToolOffBtn) {
+        exitAssignMode();
+        renderInspector();
+        onStatus(assignToolStatus(null));
+        return;
+      }
+
+      const addTextSpanBtn = event.target.closest("[data-add-text-span]");
+      if (addTextSpanBtn) {
+        const preview = getPreviewEl();
+        if (!tryAssignSpanFromSelection(preview)) {
+          onStatus("Спочатку виділіть частину тексту в документі", true);
+        }
         return;
       }
 
@@ -2144,11 +3065,39 @@ const NodeEditor = (() => {
         return;
       }
 
+      const addBlocksBtn = event.target.closest("[data-add-blocks-to]");
+      if (addBlocksBtn) {
+        selectedNodeId = addBlocksBtn.dataset.addBlocksTo;
+        const blockIds = (addBlocksBtn.dataset.blockIds || "")
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean);
+        addBlocksToSelectedNode(blockIds);
+        return;
+      }
+
       const removeBlockBtn = event.target.closest("[data-remove-node-block]");
       if (removeBlockBtn) {
         NodeModel.removeBlockFromNode(model, removeBlockBtn.dataset.removeNodeBlock, removeBlockBtn.dataset.blockId);
         notifyChange();
         onStatus("Блок прибрано");
+        return;
+      }
+
+      const removeSpanBtn = event.target.closest("[data-remove-node-span]");
+      if (removeSpanBtn) {
+        NodeModel.removeSpanFromNode(model, removeSpanBtn.dataset.removeNodeSpan, removeSpanBtn.dataset.spanId);
+        notifyChange();
+        onStatus("Фрагмент прибрано");
+        return;
+      }
+
+      const toggleAssignedBtn = event.target.closest("[data-toggle-assigned-list]");
+      if (toggleAssignedBtn) {
+        const nodeId = toggleAssignedBtn.dataset.toggleAssignedList;
+        if (assignedListExpanded.has(nodeId)) assignedListExpanded.delete(nodeId);
+        else assignedListExpanded.add(nodeId);
+        renderInspector();
         return;
       }
 
@@ -2301,10 +3250,17 @@ const NodeEditor = (() => {
           return;
         }
 
-        const variantFieldPicker = event.target.closest("#node-variant-field-picker");
+        const variantFieldPicker = event.target.closest("[data-variant-setup-field]");
         if (variantFieldPicker) {
           preferredFieldId = variantFieldPicker.value;
+          const parentId = variantFieldPicker.dataset.variantSetupField;
           renderFieldsPanel();
+          if (parentId && createVariantsFromField(parentId, preferredFieldId)) {
+            notifyChange();
+          } else {
+            renderEditorContextStrip();
+            renderInspector();
+          }
           return;
         }
 
@@ -2380,7 +3336,7 @@ const NodeEditor = (() => {
 
       model = NodeModel.cloneModel(raw || NodeModel.emptyModel());
       selectedBlockId = null;
-      assignMode = false;
+      exitAssignMode();
 
       if (preserveNavigation) {
         activeRulesPage = RULES_PAGES.includes(prevPage) ? prevPage : "structure";
@@ -2428,6 +3384,10 @@ const NodeEditor = (() => {
       return NodeModel.collectRequiredFieldIds(model);
     },
 
+    getReachableConditionFieldIds(values = null) {
+      return NodeModel.collectReachableFieldIds(model, values ?? getConditionValues());
+    },
+
     refreshConditionUi() {
       renderFieldsPanel();
       stripConditionOverlayFromPreview();
@@ -2443,8 +3403,7 @@ const NodeEditor = (() => {
     },
 
     deactivate() {
-      assignMode = false;
-      assignHoverBlockId = null;
+      exitAssignMode();
       selectedBlockId = null;
       stripRulesEditorDecorationsFromPreview();
       stripConditionOverlayFromPreview();

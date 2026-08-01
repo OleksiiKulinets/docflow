@@ -248,6 +248,7 @@ def save_edit_html(
     source_html: str | None = None,
     settings: dict[str, Any] | None = None,
     variant_rules: dict[str, Any] | None = None,
+    structure_edit_html: str | None = None,
 ) -> None:
     data = load_edit_data(file_path)
 
@@ -269,6 +270,68 @@ def save_edit_html(
 
     if "settings" not in data:
         data["settings"] = {}
+
+    if structure_edit_html is not None:
+        cache_source = source_html if source_html is not None else data.get("source_html")
+        if isinstance(cache_source, str) and cache_source.strip():
+            data["structure_edit_html"] = structure_edit_html
+            data["structure_edit_source_key"] = structure_edit_cache_key(cache_source)
+
+    _write_edit_data(file_path, data)
+
+
+def save_structure_edit_cache_only(
+    file_path: Path,
+    edit_html: str,
+    source_html: str,
+) -> None:
+    data = load_edit_data(file_path)
+    data["structure_edit_html"] = edit_html
+    data["structure_edit_source_key"] = structure_edit_cache_key(source_html)
+    _write_edit_data(file_path, data)
+
+
+def structure_edit_cache_key(source_html: str | None) -> str:
+    if not source_html:
+        return ""
+    import hashlib
+
+    return hashlib.sha256(source_html.encode("utf-8")).hexdigest()[:24]
+
+
+def load_cached_structure_edit_html(file_path: Path, source_html: str) -> str | None:
+    data = load_edit_data(file_path)
+    cached = data.get("structure_edit_html")
+    key = data.get("structure_edit_source_key")
+    if isinstance(cached, str) and cached.strip() and key == structure_edit_cache_key(source_html):
+        return cached
+    return None
+
+
+def save_v5_rules_update(
+    file_path: Path,
+    rules: dict[str, Any],
+    settings: dict[str, Any],
+    *,
+    structure_edit_html: str | None = None,
+    structure_source_key: str | None = None,
+) -> None:
+    """Update v5 rules + settings without rewriting html/source_html (fast rules-only save)."""
+    data = load_edit_data(file_path)
+    data["document_model"] = rules
+    data.pop("variant_rules", None)
+
+    merged = dict(data.get("settings") or {})
+    merged.update(settings)
+    if isinstance(rules, dict) and rules.get("schema_version") == 5:
+        merged["document_model"] = rules
+        merged.pop("variant_rules", None)
+    data["settings"] = merged
+
+    if structure_edit_html is not None:
+        data["structure_edit_html"] = structure_edit_html
+        if structure_source_key:
+            data["structure_edit_source_key"] = structure_source_key
 
     _write_edit_data(file_path, data)
 

@@ -578,11 +578,34 @@ body.is-resizing-rules-panel
     background: $accent-color
     border-radius: 1px
 
-// Rules editor — block outlines / assign mode (only on «Правила» tab)
+// Rules editor — block outlines / assign modes (only on «Правила» tab)
 .preview-panel.is-edit
   .docx-structure-mode [data-block-id]
-    cursor: pointer
     transition: background .15s ease, opacity .15s ease
+
+  .docx-canvas.is-assign-block-mode [data-block-id]
+    cursor: pointer
+    user-select: none
+    -webkit-user-select: none
+
+  .docx-canvas.is-assign-marquee-mode,
+  .docx-canvas.is-assign-marquee-mode [data-block-id]
+    cursor: crosshair
+    user-select: none
+    -webkit-user-select: none
+
+  .docx-canvas.is-assign-text-mode,
+  .docx-document.is-text-select-mode,
+  .docx-canvas.is-assign-text-mode [data-block-id],
+  .docx-document.is-text-select-mode [data-block-id]
+    cursor: text
+    user-select: text
+    -webkit-user-select: text
+
+  .docx-canvas.is-assign-text-mode *,
+  .docx-document.is-text-select-mode *
+    user-select: text
+    -webkit-user-select: text
 
   .docx-block--assign-target
     outline: 1px dashed color-mix(in srgb, $accent 55%, transparent)
@@ -594,15 +617,16 @@ body.is-resizing-rules-panel
     outline-offset: 2px
     background: color-mix(in srgb, $accent 10%, transparent) !important
 
-  .docx-canvas.is-assign-mode [data-block-id]
-    cursor: pointer
-
-  .docx-canvas.is-assign-mode td [data-block-id],
-  .docx-canvas.is-assign-mode th [data-block-id]
+  .docx-canvas.is-assign-block-mode td [data-block-id],
+  .docx-canvas.is-assign-block-mode th [data-block-id],
+  .docx-canvas.is-assign-marquee-mode td [data-block-id],
+  .docx-canvas.is-assign-marquee-mode th [data-block-id]
     position: relative
 
-  .docx-canvas.is-assign-mode td [data-block-id]::before,
-  .docx-canvas.is-assign-mode th [data-block-id]::before
+  .docx-canvas.is-assign-block-mode td [data-block-id]::before,
+  .docx-canvas.is-assign-block-mode th [data-block-id]::before,
+  .docx-canvas.is-assign-marquee-mode td [data-block-id]::before,
+  .docx-canvas.is-assign-marquee-mode th [data-block-id]::before
     content: attr(data-block-id)
     position: absolute
     top: 0
@@ -624,11 +648,46 @@ body.is-resizing-rules-panel
     outline: 2px solid $accent !important
     outline-offset: 3px
 
+  .docx-block--span-assigned
+    outline: 1px dashed color-mix(in srgb, $accent 45%, transparent) !important
+    outline-offset: 2px
+
+  mark.docx-assigned-span
+    background: color-mix(in srgb, $accent 32%, transparent)
+    color: inherit
+    border-radius: 2px
+    box-decoration-break: clone
+    -webkit-box-decoration-break: clone
+    outline: 1px solid color-mix(in srgb, $accent 55%, transparent)
+    padding: 0 1px
+
+  ::highlight(docflow-assigned)
+    background-color: color-mix(in srgb, $accent 32%, transparent)
+    color: inherit
+
   .docx-block--scroll-flash
     animation: docx-scroll-flash 1.2s ease-out
     outline: 2px solid color-mix(in srgb, $accent 70%, white) !important
     outline-offset: 4px
     background: color-mix(in srgb, $accent 12%, transparent) !important
+
+.docx-assign-marquee
+  position: fixed
+  z-index: 1000
+  box-sizing: border-box
+  border: 1px solid color-mix(in srgb, $accent 80%, #fff)
+  background: color-mix(in srgb, $accent 30%, transparent)
+  border-radius: 2px
+  pointer-events: none
+
+.markdown-body.is-assign-marquee-drag
+  user-select: none
+  cursor: crosshair
+
+.preview-panel.is-edit .docx-block--marquee-candidate
+  outline: 2px solid color-mix(in srgb, $accent 90%, transparent) !important
+  outline-offset: 1px
+  background: color-mix(in srgb, $accent 18%, transparent) !important
 
 // Preview — condition overlay (Tak/Ni), not on rules tab
 .preview-panel.has-condition-preview:not(.is-edit)
@@ -685,6 +744,63 @@ body.is-resizing-rules-panel
 
     &::before
       border-radius: 0
+
+  // У таблицях — компактна підсвітка, без роздування рядків
+  .docx-table
+    td [data-block-id].docx-block--content-active,
+    th [data-block-id].docx-block--content-active,
+    td [data-block-id].docx-block--content-inactive,
+    th [data-block-id].docx-block--content-inactive
+      padding: 1px 2px 1px 5px
+      margin: 0
+
+    [data-block-id].docx-block--content-active + [data-block-id].docx-block--content-active,
+    [data-block-id].docx-block--content-inactive + [data-block-id].docx-block--content-inactive
+      margin-top: 0
+
+    td [data-block-id].docx-block--content-active::after,
+    th [data-block-id].docx-block--content-active::after,
+    td [data-block-id].docx-block--content-inactive::after,
+    th [data-block-id].docx-block--content-inactive::after
+      top: 1px
+      right: 2px
+      font-size: 8px
+      line-height: 1.1
+      padding: 0 2px
+      background: color-mix(in srgb, var(--surface) 82%, var(--accent) 18%)
+      border-radius: 2px
+
+  // Text-span assignments — highlight fragments inside the block, not the whole block
+  .docx-block--span-mode
+    padding: 0
+    margin-left: 0
+    background: transparent
+
+    &::before,
+    &::after
+      content: none
+
+  .docx-span--content-active
+    position: relative
+    display: inline
+    border-radius: 2px
+    padding: 1px 2px
+    box-decoration-break: clone
+    -webkit-box-decoration-break: clone
+    background: color-mix(in srgb, $accent 14%, transparent)
+    box-shadow: inset 2px 0 0 $accent
+
+  .docx-span--content-inactive
+    display: inline
+    border-radius: 2px
+    padding: 1px 2px
+    box-decoration-break: clone
+    -webkit-box-decoration-break: clone
+    background: color-mix(in srgb, #c0392b 8%, transparent)
+    color: color-mix(in srgb, var(--doc-text, $text) 52%, $text-muted)
+    text-decoration: line-through
+    text-decoration-color: color-mix(in srgb, #c0392b 55%, transparent)
+    text-decoration-thickness: 1px
 
 @keyframes docx-scroll-flash
   0%

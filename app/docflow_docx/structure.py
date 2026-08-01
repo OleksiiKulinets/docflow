@@ -1,6 +1,7 @@
 import re
 import unicodedata
 import uuid
+from collections import defaultdict
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 
@@ -1166,7 +1167,69 @@ def _v5_block_ids(node: dict | None) -> list[str]:
     if not node:
         return []
     content = node.get("content") or {}
-    return list(content.get("block_ids") or [])
+    ids = list(content.get("block_ids") or [])
+    seen = set(ids)
+    for span in content.get("spans") or []:
+        block_id = span.get("block_id")
+        if block_id and block_id not in seen:
+            ids.append(str(block_id))
+            seen.add(str(block_id))
+    return ids
+
+
+def _v5_content_spans(node: dict | None) -> list[dict]:
+    if not node:
+        return []
+    content = node.get("content") or {}
+    return list(content.get("spans") or [])
+
+
+def _v5_is_variant_fork_node(model: dict, node: dict) -> bool:
+    children = _v5_ordered_children(model, node["id"])
+    branches = [
+        child
+        for child in children
+        if child.get("type") == "section" and child.get("condition")
+    ]
+    if len(branches) < 2:
+        return False
+    if _v5_is_exclusive(node):
+        return True
+    return node.get("type") == "marker"
+
+
+def _v5_collect_reachable_field_ids(model: dict, values: dict | None = None) -> list[str]:
+    """Parent fork fields first; nested fields only when the active branch is chosen."""
+    values = values or {}
+    reachable: list[str] = []
+
+    def walk(node: dict) -> None:
+        if node.get("condition") and not _v5_evaluate_condition(node.get("condition"), values):
+            return
+
+        if _v5_is_variant_fork_node(model, node):
+            field_ids = list(
+                _v5_exclusive_field_ids(_v5_ordered_children(model, node["id"]))
+            )
+            for field_id in field_ids:
+                if field_id not in reachable:
+                    reachable.append(field_id)
+            unset = [field_id for field_id in field_ids if values.get(field_id) is None]
+            if unset:
+                return
+            for child in _v5_ordered_children(model, node["id"]):
+                if child.get("type") == "section" and child.get("condition"):
+                    if _v5_evaluate_condition(child.get("condition"), values):
+                        walk(child)
+            return
+
+        for child in _v5_ordered_children(model, node["id"]):
+            walk(child)
+
+    for root in model.get("nodes") or []:
+        if not root.get("parent_id"):
+            walk(root)
+    return reachable
 
 
 def _v5_collect_field_ids(condition: dict | None) -> set[str]:
@@ -1251,7 +1314,7 @@ def _v5_collect_active_blocks(
             return
         active.update(_v5_block_ids(node))
         children = _v5_ordered_children(model, node["id"])
-        if _v5_is_exclusive(node) and children:
+        if _v5_is_variant_fork_node(model, node) and children:
             field_ids = _v5_exclusive_field_ids(children)
             has_choice = bool(field_ids) and all(
                 values.get(field_id) is not None for field_id in field_ids
@@ -1280,10 +1343,235 @@ def _v5_all_blocks(model: dict) -> set[str]:
 
 
 def _v5_rules_ready(model: dict, values: dict) -> bool:
-    field_ids = _v5_active_field_ids(model)
+    field_ids = _v5_collect_reachable_field_ids(model, values)
     if not field_ids:
         return False
     return all(values.get(field_id) is not None for field_id in field_ids)
+
+
+def _v5_blocks_with_full_assignment(model: dict) -> set[str]:
+    blocks: set[str] = set()
+    for node in model.get("nodes") or []:
+        for block_id in (node.get("content") or {}).get("block_ids") or []:
+            if block_id:
+                blocks.add(str(block_id))
+    return blocks
+
+
+def _v5_collect_span_roles(model: dict, values: dict) -> dict[str, list[tuple[int, int, str]]]:
+    """Map block_id → [(start, end, content-active|content-inactive)] for text-span assignments."""
+    if not _v5_has_explicit_choice(model, values):
+        return {}
+
+    roles: dict[str, list[tuple[int, int, str]]] = defaultdict(list)
+    roots = [
+        node
+        for node in model.get("nodes") or []
+        if not node.get("parent_id")
+    ]
+
+    def walk(
+        node: dict,
+        *,
+        branch_active: bool = True,
+        ignore_branch_predicates: bool = False,
+    ) -> None:
+        if not ignore_branch_predicates and not _v5_evaluate_condition(node.get("condition"), values):
+            return
+
+        for span in _v5_content_spans(node):
+            block_id = span.get("block_id")
+            start = span.get("start")
+            end = span.get("end")
+            if not block_id or not isinstance(start, int) or not isinstance(end, int) or end <= start:
+                continue
+            role = "content-active" if branch_active else "content-inactive"
+            roles[str(block_id)].append((start, end, role))
+
+        children = _v5_ordered_children(model, node["id"])
+        if _v5_is_variant_fork_node(model, node) and children:
+            field_ids = _v5_exclusive_field_ids(children)
+            has_choice = bool(field_ids) and all(
+                values.get(field_id) is not None for field_id in field_ids
+            )
+            if not has_choice:
+                for child in children:
+                    walk(child, branch_active=True, ignore_branch_predicates=True)
+                return
+            for child in children:
+                child_active = _v5_evaluate_condition(child.get("condition"), values)
+                walk(child, branch_active=child_active, ignore_branch_predicates=True)
+            return
+
+        for child in children:
+            walk(child, branch_active=branch_active, ignore_branch_predicates=ignore_branch_predicates)
+
+    for root in roots:
+        walk(root)
+    return dict(roles)
+
+
+def _apply_span_markers_to_block(block: Tag, markers: list[tuple[int, int, str]]) -> None:
+    text = block.get_text()
+    if not text or not markers:
+        return
+
+    char_roles: list[str | None] = [None] * len(text)
+    for start, end, role in markers:
+        for index in range(max(0, start), min(end, len(text))):
+            if char_roles[index] is None or role == "content-active":
+                char_roles[index] = role
+
+    segments: list[tuple[str, str | None]] = []
+    index = 0
+    while index < len(text):
+        role = char_roles[index]
+        next_index = index + 1
+        while next_index < len(text) and char_roles[next_index] == role:
+            next_index += 1
+        segments.append((text[index:next_index], role))
+        index = next_index
+
+    block.clear()
+    soup = BeautifulSoup("", "html.parser")
+    for chunk, role in segments:
+        if not chunk:
+            continue
+        if role:
+            wrapper = soup.new_tag("span", attrs={"class": f"docx-span--{role}"})
+            wrapper.string = chunk
+            block.append(wrapper)
+        else:
+            block.append(NavigableString(chunk))
+
+
+def _v5_apply_span_preview(root: Tag, span_roles: dict[str, list[tuple[int, int, str]]], *, skip_block_ids: set[str]) -> None:
+    for block in _iter_annotated_blocks(root):
+        block_id = block.get("data-block-id", "")
+        if not block_id or block_id in skip_block_ids:
+            continue
+        markers = span_roles.get(block_id)
+        if not markers:
+            continue
+        _apply_span_markers_to_block(block, markers)
+        _append_class(block, "docx-block--span-mode")
+
+
+def _v5_remove_text_ranges(block: Tag, ranges: list[tuple[int, int]]) -> None:
+    if not ranges:
+        return
+    text = block.get_text()
+    if not text:
+        return
+
+    keep = [True] * len(text)
+    for start, end in ranges:
+        for index in range(max(0, start), min(end, len(text))):
+            keep[index] = False
+
+    new_text = "".join(character for index, character in enumerate(text) if keep[index])
+    block.clear()
+    if new_text:
+        block.append(new_text)
+
+
+def _v5_collect_inactive_span_ranges(
+    model: dict, values: dict,
+) -> dict[str, list[tuple[int, int]]]:
+    inactive: dict[str, list[tuple[int, int]]] = defaultdict(list)
+    for block_id, markers in _v5_collect_span_roles(model, values).items():
+        for start, end, role in markers:
+            if role == "content-inactive":
+                inactive[block_id].append((start, end))
+    return dict(inactive)
+
+
+def _v5_remove_inactive_spans(root: Tag, model: dict, values: dict) -> None:
+    inactive_ranges = _v5_collect_inactive_span_ranges(model, values)
+    if not inactive_ranges:
+        return
+
+    for block in _iter_annotated_blocks(root):
+        block_id = block.get("data-block-id", "")
+        ranges = inactive_ranges.get(block_id)
+        if ranges:
+            _v5_remove_text_ranges(block, ranges)
+
+
+def _strip_v5_overlay_classes(root: Tag) -> None:
+    overlay_classes = frozenset(
+        {
+            "docx-block--content-active",
+            "docx-block--content-inactive",
+            "docx-block--span-mode",
+            "docx-span--content-active",
+            "docx-span--content-inactive",
+        }
+    )
+    for element in root.find_all(True):
+        classes = [name for name in (element.get("class") or []) if name not in overlay_classes]
+        if classes:
+            element["class"] = classes
+        elif element.has_attr("class"):
+            del element["class"]
+
+    for span in root.find_all("span"):
+        if span.get("class"):
+            continue
+        if span.attrs.keys() - {"class"}:
+            continue
+        span.unwrap()
+
+
+def _v5_apply_content_spans(root, model: dict, values: dict) -> None:
+    """Trim active blocks to assigned text spans (character-level content)."""
+    active_nodes: list[dict] = []
+
+    def walk(node: dict) -> None:
+        if node.get("condition") and not _v5_evaluate_condition(node.get("condition"), values):
+            return
+        children = _v5_ordered_children(model, node["id"])
+        if _v5_is_variant_fork_node(model, node) and children:
+            field_ids = _v5_exclusive_field_ids(children)
+            has_choice = bool(field_ids) and all(
+                values.get(field_id) is not None for field_id in field_ids
+            )
+            if not has_choice:
+                for child in children:
+                    walk(child)
+                return
+            for child in children:
+                if _v5_evaluate_condition(child.get("condition"), values):
+                    walk(child)
+            return
+        if _v5_content_spans(node):
+            active_nodes.append(node)
+        for child in children:
+            walk(child)
+
+    for root_node in model.get("nodes") or []:
+        if not root_node.get("parent_id"):
+            walk(root_node)
+
+    for node in active_nodes:
+        for span in _v5_content_spans(node):
+            block_id = span.get("block_id")
+            if not block_id:
+                continue
+            start = span.get("start")
+            end = span.get("end")
+            if not isinstance(start, int) or not isinstance(end, int) or end <= start:
+                continue
+            for block in _iter_annotated_blocks(root):
+                if block.get("data-block-id", "") != str(block_id):
+                    continue
+                text = block.get_text()
+                if start >= len(text):
+                    continue
+                excerpt = text[start:min(end, len(text))]
+                block.clear()
+                block.append(excerpt)
+                break
 
 
 def _v5_has_explicit_choice(model: dict, values: dict) -> bool:
@@ -1297,11 +1585,14 @@ def _v5_highlight_map(model: dict, values: dict) -> dict[str, str]:
 
     active = _v5_collect_active_blocks(model, values)
     all_blocks = _v5_all_blocks(model)
+    full_assignment_blocks = _v5_blocks_with_full_assignment(model)
     if not all_blocks:
         return {}
 
     highlights: dict[str, str] = {}
     for block_id in all_blocks:
+        if block_id not in full_assignment_blocks:
+            continue
         highlights[block_id] = (
             "content-active" if block_id in active else "content-inactive"
         )
@@ -1332,8 +1623,19 @@ def apply_document_model(
 
     active_blocks = _v5_collect_active_blocks(model, values)
     highlights = _v5_highlight_map(model, values)
-    if highlights:
-        html = apply_highlights(html, highlights)
+    span_roles = _v5_collect_span_roles(model, values)
+    full_assignment_blocks = _v5_blocks_with_full_assignment(model)
+
+    if not finalize:
+        if highlights:
+            html = apply_highlights(html, highlights)
+
+        if span_roles:
+            soup = BeautifulSoup(f"<div id='v5-span-root'>{html}</div>", "html.parser")
+            span_root = soup.find("div", id="v5-span-root")
+            if span_root is not None:
+                _v5_apply_span_preview(span_root, span_roles, skip_block_ids=full_assignment_blocks)
+                html = span_root.decode_contents()
 
     ready = _v5_rules_ready(model, values)
     if not ready and not finalize:
@@ -1345,12 +1647,15 @@ def apply_document_model(
         return html
 
     if finalize and ready:
-        remove_ids = _v5_all_blocks(model) - active_blocks
+        _v5_apply_content_spans(root, model, values)
+        remove_ids = full_assignment_blocks - active_blocks
         if remove_ids:
             for block in _iter_annotated_blocks(root):
                 block_id = block.get("data-block-id", "")
                 if block_id in remove_ids:
                     block.decompose()
+        _v5_remove_inactive_spans(root, model, values)
+        _strip_v5_overlay_classes(root)
         strip_red_content(root)
     elif ready:
         if not highlights:

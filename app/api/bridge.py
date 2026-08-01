@@ -200,13 +200,14 @@ class DocFlowApi:
 
     def get_edit_view(self, file_id: str, html_b64: str | None = None) -> dict:
         try:
-            _log.info("get_edit_view file_id=%s html_b64=%s", file_id, bool(html_b64))
+            _log.debug("get_edit_view file_id=%s html_b64=%s", file_id, bool(html_b64))
             data = file_service.get_edit_view(file_id, html_b64)
             edit_html = data.get("edit_html") or ""
-            _log.info(
-                "get_edit_view ok file_id=%s edit_html_chars=%d",
+            _log.debug(
+                "get_edit_view ok file_id=%s edit_html_chars=%d cached=%s",
                 file_id,
                 len(edit_html),
+                data.get("edit_html_from_cache"),
             )
             return self._ok(self._encode(data))
         except Exception as exc:
@@ -221,11 +222,11 @@ class DocFlowApi:
 
     def sync_document_source(self, file_id: str, html_b64: str) -> dict:
         try:
-            _log.info("sync_document_source file_id=%s html_b64_chars=%d", file_id, len(html_b64 or ""))
+            _log.debug("sync_document_source file_id=%s html_b64_chars=%d", file_id, len(html_b64 or ""))
             data = file_service.sync_document_source(file_id, html_b64)
             edit_html = data.get("edit_html") or ""
             preview_html = data.get("preview_html") or ""
-            _log.info(
+            _log.debug(
                 "sync_document_source ok file_id=%s preview_chars=%d edit_chars=%d",
                 file_id,
                 len(preview_html),

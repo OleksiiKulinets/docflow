@@ -22,10 +22,11 @@ const ApiClient = (() => {
   function encodeHtml(html) {
     if (!html) return "";
     const bytes = new TextEncoder().encode(html);
+    const chunkSize = 0x8000;
     let binary = "";
-    bytes.forEach((byte) => {
-      binary += String.fromCharCode(byte);
-    });
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
     return btoa(binary);
   }
 

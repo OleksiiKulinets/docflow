@@ -40,7 +40,13 @@ const NodeModel = (() => {
       parent_id: node.parent_id ?? null,
       children_order: [...(node.children_order || [])],
       condition: node.condition ?? null,
-      content: node.content ? { ...node.content, block_ids: [...(node.content.block_ids || [])] } : null,
+      content: node.content
+        ? {
+            ...node.content,
+            block_ids: [...(node.content.block_ids || [])],
+            spans: (node.content.spans || []).map((span) => ({ ...span })),
+          }
+        : null,
       properties: { ...(node.properties || {}) },
       metadata: { ...(node.metadata || {}) },
     }));
@@ -624,7 +630,7 @@ const NodeModel = (() => {
     }
     if (path === "content.block_ids") {
       node.content = { ...(node.content || {}), block_ids: [...value] };
-      if (!node.content.block_ids.length) node.content = null;
+      if (!node.content.block_ids.length && !getContentSpans(node).length) node.content = null;
       return true;
     }
     if (path.startsWith("metadata.")) {
@@ -653,6 +659,18 @@ const NodeModel = (() => {
     return [...(node?.content?.block_ids || [])];
   }
 
+  function getContentSpans(node) {
+    return [...(node?.content?.spans || [])];
+  }
+
+  function getAllContentBlockIds(node) {
+    const ids = new Set(getBlockIds(node));
+    getContentSpans(node).forEach((span) => {
+      if (span?.block_id) ids.add(span.block_id);
+    });
+    return [...ids];
+  }
+
   function supportsBlockContent(node) {
     return ["paragraph", "table", "marker"].includes(node?.type);
   }
@@ -661,34 +679,83 @@ const NodeModel = (() => {
     return updateNodeProperty(model, nodeId, "content.block_ids", [...blockIds]);
   }
 
+  function setContentSpans(model, nodeId, spans) {
+    const node = getNode(model, nodeId);
+    if (!node) return false;
+    const next = spans?.length ? spans.map((span) => ({ ...span })) : [];
+    if (!next.length && !getBlockIds(node).length) {
+      node.content = null;
+      return true;
+    }
+    node.content = { ...(node.content || {}), spans: next };
+    if (!node.content.block_ids?.length && !next.length) node.content = null;
+    return true;
+  }
+
+  function addSpanToNode(model, nodeId, span) {
+    if (!span?.block_id) return false;
+    const node = getNode(model, nodeId);
+    if (!node || !supportsBlockContent(node)) return false;
+
+    const blockId = span.block_id;
+    const spans = getContentSpans(node).filter((item) => item.block_id !== blockId);
+    spans.push({
+      id: span.id || newId("span"),
+      block_id: blockId,
+      start: span.start,
+      end: span.end,
+      text: span.text || "",
+    });
+
+    const blockIds = getBlockIds(node).filter((id) => id !== blockId);
+    node.content = { ...(node.content || {}), block_ids: blockIds, spans };
+    if (!blockIds.length && !spans.length) node.content = null;
+    return true;
+  }
+
+  function removeSpanFromNode(model, nodeId, spanId) {
+    const node = getNode(model, nodeId);
+    if (!node) return false;
+    const spans = getContentSpans(node).filter((span) => span.id !== spanId);
+    return setContentSpans(model, nodeId, spans);
+  }
+
   function addBlockToNode(model, nodeId, blockId) {
     if (!blockId) return false;
     const node = getNode(model, nodeId);
     if (!node || !supportsBlockContent(node)) return false;
     const ids = getBlockIds(node);
     if (ids.includes(blockId)) return true;
-    return setBlockIds(model, nodeId, [...ids, blockId]);
+    const spans = getContentSpans(node).filter((span) => span.block_id !== blockId);
+    node.content = { ...(node.content || {}), block_ids: [...ids, blockId], spans };
+    return true;
   }
 
   function removeBlockFromNode(model, nodeId, blockId) {
     const node = getNode(model, nodeId);
     if (!node) return false;
-    return setBlockIds(
-      model,
-      nodeId,
-      getBlockIds(node).filter((id) => id !== blockId),
-    );
+    const spans = getContentSpans(node).filter((span) => span.block_id !== blockId);
+    const blockIds = getBlockIds(node).filter((id) => id !== blockId);
+    node.content = { ...(node.content || {}), block_ids: blockIds, spans };
+    if (!blockIds.length && !spans.length) node.content = null;
+    return true;
   }
 
   function findNodeByBlockId(model, blockId) {
     if (!blockId) return null;
-    return (model.nodes || []).find((node) => getBlockIds(node).includes(blockId)) || null;
+    return (
+      (model.nodes || []).find(
+        (node) =>
+          getBlockIds(node).includes(blockId) ||
+          getContentSpans(node).some((span) => span.block_id === blockId),
+      ) || null
+    );
   }
 
   function collectAssignedBlockMap(model) {
     const map = new Map();
     (model.nodes || []).forEach((node) => {
-      getBlockIds(node).forEach((blockId) => map.set(blockId, node.id));
+      getAllContentBlockIds(node).forEach((blockId) => map.set(blockId, node.id));
     });
     return map;
   }
@@ -772,12 +839,12 @@ const NodeModel = (() => {
 
       if (isVariantForkNode(model, node)) {
         const fieldIds = exclusiveForkFieldIds(model, node);
+        fieldIds.forEach((fieldId) => {
+          if (!reachable.includes(fieldId)) reachable.push(fieldId);
+        });
         const unset = fieldIds.filter(
           (fieldId) => values[fieldId] === undefined || values[fieldId] === null,
         );
-        unset.forEach((fieldId) => {
-          if (!reachable.includes(fieldId)) reachable.push(fieldId);
-        });
         if (unset.length) return;
 
         orderedChildren(model, node.id)
@@ -808,6 +875,7 @@ const NodeModel = (() => {
     }
 
     if ((node.content?.block_ids || []).length > 0) return true;
+    if ((node.content?.spans || []).length > 0) return true;
 
     const children = orderedChildren(model, node.id);
     if (!children.length) return false;
@@ -1003,10 +1071,15 @@ const NodeModel = (() => {
     nodeLabel,
     nodeBehavior,
     getBlockIds,
+    getContentSpans,
+    getAllContentBlockIds,
     supportsBlockContent,
     setBlockIds,
+    setContentSpans,
     addBlockToNode,
     removeBlockFromNode,
+    addSpanToNode,
+    removeSpanFromNode,
     findNodeByBlockId,
     collectAssignedBlockMap,
     isExclusiveSection,
